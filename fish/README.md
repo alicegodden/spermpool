@@ -1,8 +1,10 @@
 # Contents
 
 # R scripts
-Haploid Analyses.Rmd # R notebook of scripts used to generate plots
+??? Daniels R Scripts
 
+# Variant calling phenogram
+fish_phenogram.py # Plotting sperm pools data from variant calling pipeline
 
 # Go terms plots
 autobubble_goplot.py # Uses a ShinyGo csv file as input to automate and control bubble plots in python
