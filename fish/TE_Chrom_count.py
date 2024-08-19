@@ -20,17 +20,17 @@ def extract_chrom_pos_from_vcf(vcf_file):
 
 # Replace with your VCF file paths
 vcf_files = [
-    'FC_HEADERFILTERPY_merged_with_header_win150_int_filtered.vcf',
-    'FT_HEADERFILTERPY_merged_with_header_win150_int_filtered.vcf',
-    'MC_HEADERFILTERPY_merged_with_header_win150_int_filtered.vcf',
-    'MT_HEADERFILTERPY_merged_with_header_win150_int_filtered.vcf'
+    'Non_minusNon_nmdups_win100_chrom_gq1000_fl8.vcf',
+    'Finclip_minusNon_nmdups_win100_chrom_gq1000_fl8.vcf',
+    'Central_minusNon_nmdups_win100_chrom_gq1000_fl8.vcf',
+    'Outer_minusNon_nmdups_win100_chrom_gq1000_fl8.vcf'
 ]
 # Corresponding sample names
 sample_names = [
-    'Ovaries Ctrl',
-    'Ovaries Temp',
-    'Testes Ctrl',
-    'Testes Temp'
+    'Non-selected',
+    'Fin-clip',
+    'Central',
+    'Outer'
 ]
 
 # Store counts for each VCF file
@@ -47,7 +47,7 @@ chromosomes = list(map(str, range(1, 26)))
 data = {sample_name: [te_counts.get(chrom, 0) for chrom in chromosomes] for sample_name, te_counts in zip(sample_names, all_te_counts)}
 
 # Color palette for the lines
-rocket_palette = sns.color_palette("rocket", len(sample_names))
+rocket_palette = sns.color_palette("mako", len(sample_names))
 
 # Plotting
 fig, ax = plt.subplots(figsize=(15, 8))
@@ -64,6 +64,6 @@ plt.yticks(fontsize=12, fontweight='bold')
 plt.legend(title='Samples', fontsize=12, title_fontsize=14, loc='upper right')
 
 # Save and display the plot
-output_file = 'TE_counts_per_chromosome.png'
+output_file = 'TE_counts_per_chromosome_spermpool.png'
 plt.savefig(output_file, dpi=600)
 plt.show()
