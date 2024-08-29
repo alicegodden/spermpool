@@ -1,6 +1,3 @@
-# Title: Human phenogram for plotting variants
-# Author: Dr. Alice M. Godden
-
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
@@ -8,7 +5,7 @@ from matplotlib.patches import Ellipse
 from matplotlib.lines import Line2D
 
 # Define file paths
-input_file = 'T0xT4_cov200.csv'  # Replace with your CSV file path
+input_file = 'T0xT48_cov200.csv'  # Replace with your CSV file path
 
 # Read the input CSV file
 data = pd.read_csv(input_file)
@@ -28,7 +25,7 @@ donor_palette = {
     'Donor6': '#8c564b',  # Brown
     'Donor7': '#e377c2',  # Pink
     'Donor8': '#7f7f7f',  # Gray
-    'Donor9': '#bcbd22'   # Olive
+    'Donor9': '#bcbd22'  # Olive
 }
 
 # Get the colors for each sample
@@ -87,7 +84,7 @@ for sample in data['Sample'].unique():
     sample_data = data[data['Sample'] == sample]
     marker = '^' if sample == 'Donor6' else 'o'  # Use '^' marker for 'Donor6', 'o' for others
     ax.scatter(sample_data['subjChr'] * x_offset_multiplier, sample_data['subjStart'],
-               color=sample_colors[sample], marker=marker, label=sample, alpha=0.7)
+               color=sample_colors[sample], marker=marker, label=sample, alpha=0.9)
 
 # Add ellipses for each half of the chromosome
 for i, (chrom, end) in enumerate(end_data):
@@ -130,18 +127,21 @@ for chrom, pos, gene in genes_data:
             ha='left',  # Align text to the left (to move it to the right of the point)
             va='center',
             fontsize=11,
+            rotation=90,
+
             fontweight='bold',
             arrowprops=dict(
                 arrowstyle="->",  # Adds the line joining the label and the position
                 color='black',
-                lw=1,
+
+                lw=0.8,
             )
         )
 
 # Customizing plot details
 plt.xlabel('Chromosome', fontsize=18, fontweight='bold')
 plt.ylabel('Position', fontsize=18, fontweight='bold')
-plt.title('Human T0 x T24', fontsize=20, fontweight='bold')
+plt.title('Human T0 x T48', fontsize=20, fontweight='bold')
 chrom_labels = [i * x_offset_multiplier for i in range(1, 25)]
 ax.set_xticks(chrom_labels)
 ax.set_xticklabels([f'chr{i}' for i in range(1, 23)] + ['chrX', 'chrY'], fontsize=8.5, fontweight='bold')
@@ -153,12 +153,12 @@ legend_elements = [
     for sample, color in sample_colors.items() if sample != 'Donor6'
 ] + [
     # Use the color for 'Donor6' from the donor_palette dictionary
-    Line2D([0], [0], marker='^', color='w', markerfacecolor=sample_colors.get('Donor6', '#000000'), markersize=10, label='Donor 6'),
+    Line2D([0], [0], marker='^', color='w', markerfacecolor=sample_colors.get('Donor6', '#000000'), markersize=10, label='Donor6'),
     Line2D([0], [0], marker='D', color='w', markerfacecolor='grey', markersize=8, label='Centromere')
 ]
 plt.legend(handles=legend_elements, fontsize=12, loc='upper right')
 
 # Save and display the plot
-output_file = 'T0vt24.png'  # Replace with your desired filename and extension
+output_file = 'T0vt48.png'  # Replace with your desired filename and extension
 plt.savefig(output_file, dpi=600)
 plt.show()
