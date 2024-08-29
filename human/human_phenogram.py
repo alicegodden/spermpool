@@ -1,5 +1,6 @@
 # Title: Human phenogram for plotting variants
 # Author: Dr. Alice M. Godden
+
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
@@ -70,13 +71,13 @@ data = data.dropna(subset=['subjChr'])
 
 # Create the plot
 fig, ax = plt.subplots(figsize=(12, 6))
-plt.tight_layout()
+plt.tight_layout(pad=2)
 
 # Plot each sample with a different color and marker
 x_offset_multiplier = 2  # Adjust this multiplier to control space between chromosomes
 for sample in samples:
     sample_data = data[data['Sample'] == sample]
-    marker = '*' if sample == 'Donor6' else 'o'  # Use '*' marker for 'donor 6', 'o' for others
+    marker = '^' if sample == 'Donor6' else 'o'  # Use '*' marker for 'donor 6', 'o' for others
     ax.scatter(sample_data['subjChr'] * x_offset_multiplier, sample_data['subjStart'],
                color=sample_colors[sample], marker=marker, label=sample, alpha=0.7)
 
@@ -123,7 +124,7 @@ for chrom, pos, gene in genes_data:
             fontsize=11,
             fontweight='bold',
             arrowprops=dict(
-                arrowstyle="simple",  # Adds the line joining the label and the position
+                arrowstyle="->",  # Adds the line joining the label and the position
                 color='black',
                 lw=1,
             )
@@ -144,7 +145,7 @@ legend_elements = [
     for sample, color in sample_colors.items() if sample != 'Donor6'
 ] + [
     # Use the color for 'donor 6' from the sample_colors dictionary
-    Line2D([0], [0], marker='*', color='w', markerfacecolor=sample_colors.get('Donor6', 'black'), markersize=10, label='Donor 6'),
+    Line2D([0], [0], marker='^', color='w', markerfacecolor=sample_colors.get('Donor6', 'black'), markersize=10, label='Donor 6'),
     Line2D([0], [0], marker='D', color='w', markerfacecolor='grey', markersize=8, label='Centromere')
 ]
 plt.legend(handles=legend_elements, fontsize=12, loc='upper right')
