@@ -1,9 +1,5 @@
 # Title: Human phenogram for plotting variants
 # Author: Dr. Alice M. Godden
-# Title: Human phenogram for plotting variants
-# Author: Dr. Alice M. Godden
-# GRCh38 ncbi_refseq track used from table browser UCSC to plot exons
-
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
@@ -22,12 +18,12 @@ if data['Sample'].isnull().any():
     print("Found NaN values in 'Sample' column. Removing rows with NaN values.")
     data = data.dropna(subset=['Sample'])
 
-# Define a rainbow palette with 9 colors
-rainbow_palette = sns.color_palette("husl", 9)
+# Define a palette with distinct colors
+palette = sns.color_palette("husl", n_colors=len(data['Sample'].unique()))
 
 # Assign colors to samples based on their order
 samples = data['Sample'].unique()
-sample_colors = {sample: rainbow_palette[i % 9] for i, sample in enumerate(samples)}
+sample_colors = {sample: palette[i % len(palette)] for i, sample in enumerate(samples)}
 
 # Read the centromere file
 chrcen_data = []
@@ -73,16 +69,16 @@ data['subjChr'] = data['subjChr'].apply(get_chrom_number)
 data = data.dropna(subset=['subjChr'])
 
 # Create the plot
-fig, ax = plt.subplots(figsize=(16, 8))
-
+fig, ax = plt.subplots(figsize=(12, 6))
+plt.tight_layout()
 
 # Plot each sample with a different color and marker
 x_offset_multiplier = 2  # Adjust this multiplier to control space between chromosomes
 for sample in samples:
     sample_data = data[data['Sample'] == sample]
-    marker = '^' if sample == 'Donor6' else 'o'  # Use '*' marker for 'donor 6', 'o' for others
+    marker = '*' if sample == 'Donor6' else 'o'  # Use '*' marker for 'donor 6', 'o' for others
     ax.scatter(sample_data['subjChr'] * x_offset_multiplier, sample_data['subjStart'],
-               color=sample_colors[sample], marker=marker, label=sample, alpha=0.5)
+               color=sample_colors[sample], marker=marker, label=sample, alpha=0.7)
 
 # Add ellipses for each half of the chromosome
 for i, (chrom, end) in enumerate(end_data):
@@ -147,7 +143,8 @@ legend_elements = [
     Line2D([0], [0], marker='o', color='w', markerfacecolor=color, markersize=10, label=sample)
     for sample, color in sample_colors.items() if sample != 'Donor6'
 ] + [
-    Line2D([0], [0], marker='^', color='w', markerfacecolor=sample_colors.get('Donor6', 'black'), markersize=12, label='Donor 6'),
+    # Use the color for 'donor 6' from the sample_colors dictionary
+    Line2D([0], [0], marker='*', color='w', markerfacecolor=sample_colors.get('Donor6', 'black'), markersize=10, label='Donor 6'),
     Line2D([0], [0], marker='D', color='w', markerfacecolor='grey', markersize=8, label='Centromere')
 ]
 plt.legend(handles=legend_elements, fontsize=12, loc='upper right')
