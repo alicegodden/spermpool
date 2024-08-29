@@ -109,7 +109,7 @@ for chrom, pos, gene in genes_data:
     chrom_num = get_chrom_number(chrom)
     if chrom_num:
         # Offset for labels to the right of the chromosome ellipse
-        x_offset = 0.2  # Adjust this value as needed
+        x_offset = 0.25  # Adjust this value as needed
         x_pos = chrom_num * x_offset_multiplier  # Use chrom_num directly from the mapping
         y_pos = pos
 
