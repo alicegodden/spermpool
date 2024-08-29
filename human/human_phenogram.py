@@ -8,8 +8,7 @@ from matplotlib.patches import Ellipse
 from matplotlib.lines import Line2D
 
 # Define file paths
-input_file = 'T0xT48_cov200.csv'  # Replace with your CSV file path
-# dopes_file = 'GRCh38_exon.txt'  # Replace with your DOPEs file path track of interest
+input_file = 'T0xT4_cov200.csv'  # Replace with your CSV file path
 
 # Read the input CSV file
 data = pd.read_csv(input_file)
@@ -19,12 +18,21 @@ if data['Sample'].isnull().any():
     print("Found NaN values in 'Sample' column. Removing rows with NaN values.")
     data = data.dropna(subset=['Sample'])
 
-# Define a palette with distinct colors
-palette = sns.color_palette("husl", n_colors=len(data['Sample'].unique()))
+# Define a specific color palette for the donors
+donor_palette = {
+    'Donor1': '#1f77b4',  # Blue
+    'Donor2': '#ff7f0e',  # Orange
+    'Donor3': '#2ca02c',  # Green
+    'Donor4': '#d62728',  # Red
+    'Donor5': '#9467bd',  # Purple
+    'Donor6': '#8c564b',  # Brown
+    'Donor7': '#e377c2',  # Pink
+    'Donor8': '#7f7f7f',  # Gray
+    'Donor9': '#bcbd22'   # Olive
+}
 
-# Assign colors to samples based on their order
-samples = data['Sample'].unique()
-sample_colors = {sample: palette[i % len(palette)] for i, sample in enumerate(samples)}
+# Get the colors for each sample
+sample_colors = {sample: donor_palette.get(sample, '#000000') for sample in data['Sample'].unique()}
 
 # Read the centromere file
 chrcen_data = []
@@ -75,9 +83,9 @@ plt.tight_layout(pad=2)
 
 # Plot each sample with a different color and marker
 x_offset_multiplier = 2  # Adjust this multiplier to control space between chromosomes
-for sample in samples:
+for sample in data['Sample'].unique():
     sample_data = data[data['Sample'] == sample]
-    marker = '^' if sample == 'Donor6' else 'o'  # Use '*' marker for 'donor 6', 'o' for others
+    marker = '^' if sample == 'Donor6' else 'o'  # Use '^' marker for 'Donor6', 'o' for others
     ax.scatter(sample_data['subjChr'] * x_offset_multiplier, sample_data['subjStart'],
                color=sample_colors[sample], marker=marker, label=sample, alpha=0.7)
 
@@ -133,7 +141,7 @@ for chrom, pos, gene in genes_data:
 # Customizing plot details
 plt.xlabel('Chromosome', fontsize=18, fontweight='bold')
 plt.ylabel('Position', fontsize=18, fontweight='bold')
-plt.title('Human T0 x T48 cov > 200', fontsize=20, fontweight='bold')
+plt.title('Human T0 x T24', fontsize=20, fontweight='bold')
 chrom_labels = [i * x_offset_multiplier for i in range(1, 25)]
 ax.set_xticks(chrom_labels)
 ax.set_xticklabels([f'chr{i}' for i in range(1, 23)] + ['chrX', 'chrY'], fontsize=8.5, fontweight='bold')
@@ -144,13 +152,13 @@ legend_elements = [
     Line2D([0], [0], marker='o', color='w', markerfacecolor=color, markersize=10, label=sample)
     for sample, color in sample_colors.items() if sample != 'Donor6'
 ] + [
-    # Use the color for 'donor 6' from the sample_colors dictionary
-    Line2D([0], [0], marker='^', color='w', markerfacecolor=sample_colors.get('Donor6', 'black'), markersize=10, label='Donor 6'),
+    # Use the color for 'Donor6' from the donor_palette dictionary
+    Line2D([0], [0], marker='^', color='w', markerfacecolor=sample_colors.get('Donor6', '#000000'), markersize=10, label='Donor 6'),
     Line2D([0], [0], marker='D', color='w', markerfacecolor='grey', markersize=8, label='Centromere')
 ]
 plt.legend(handles=legend_elements, fontsize=12, loc='upper right')
 
 # Save and display the plot
-output_file = 'TESTY.png'  # Replace with your desired filename and extension
+output_file = 'T0vt24.png'  # Replace with your desired filename and extension
 plt.savefig(output_file, dpi=600)
 plt.show()
