@@ -1,7 +1,5 @@
 # Contents
 
-# R scripts
-??? Daniels R Scripts
 
 # Variant calling phenogram
 fish_phenogram.py # Plotting sperm pools data from variant calling pipeline
