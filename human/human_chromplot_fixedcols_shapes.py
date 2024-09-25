@@ -1,3 +1,7 @@
+# Title: Chromosomal plots of variants
+# Author: Dr. Alice M. Godden
+
+
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
@@ -24,9 +28,6 @@ donor_palette = {
     'Donor4': '#d62728',  # Red
     'Donor5': '#9467bd',  # Purple
     'Donor6': '#8c564b',  # Brown
-    'Donor7': '#e377c2',  # Pink
-    'Donor8': '#7f7f7f',  # Gray
-    'Donor9': '#bcbd22'  # Olive
 }
 
 # Get the colors for each sample
@@ -75,9 +76,9 @@ chromosomes = [f'chr{i}' for i in range(1, 23)] + ['chrX', 'chrY']
 data['subjChr'] = data['subjChr'].apply(get_chrom_number)
 data = data.dropna(subset=['subjChr'])
 
-# Create the plot
-fig, ax = plt.subplots(figsize=(12, 6))
-plt.tight_layout(pad=2)
+# Create the plot with the specified size (12 inches width, 8 inches height)
+fig, ax = plt.subplots(figsize=(12, 8))
+plt.tight_layout(pad=4)
 
 # Plot each sample with a different color and marker
 x_offset_multiplier = 2  # Adjust this multiplier to control space between chromosomes
@@ -150,7 +151,7 @@ for chrom, pos, gene in genes_data:
 # Customizing plot details
 plt.xlabel('Chromosome', fontsize=18, fontweight='bold')
 plt.ylabel('Position', fontsize=18, fontweight='bold')
-plt.title('Human T0 x T2', fontsize=20, fontweight='bold')
+plt.title('Human Experiment 1 (Methyl Cellulose)', fontsize=20, fontweight='bold')
 chrom_labels = [i * x_offset_multiplier for i in range(1, 25)]
 ax.set_xticks(chrom_labels)
 ax.set_xticklabels([f'chr{i}' for i in range(1, 23)] + ['chrX', 'chrY'], fontsize=8.5, fontweight='bold')
@@ -170,6 +171,6 @@ legend_elements = [
 plt.legend(handles=legend_elements, fontsize=12, loc='upper right')
 
 # Save and display the plot
-output_file = 'T0vt2.png'  # Replace with your desired filename and extension
+output_file = 'DMAG_T0vt2_EXP1_title.png'  # Replace with your desired filename and extension
 plt.savefig(output_file, dpi=600)
 plt.show()
