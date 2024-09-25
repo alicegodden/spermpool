@@ -1,7 +1,6 @@
 # Title: Chromosomal plots of variants
 # Author: Dr. Alice M. Godden
 
-
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
@@ -28,6 +27,9 @@ donor_palette = {
     'Donor4': '#d62728',  # Red
     'Donor5': '#9467bd',  # Purple
     'Donor6': '#8c564b',  # Brown
+    #'Donor7': '#e377c2',  # Pink
+    #'Donor8': '#7f7f7f',  # Gray
+    #'Donor9': '#bcbd22'  # Olive
 }
 
 # Get the colors for each sample
@@ -76,7 +78,7 @@ chromosomes = [f'chr{i}' for i in range(1, 23)] + ['chrX', 'chrY']
 data['subjChr'] = data['subjChr'].apply(get_chrom_number)
 data = data.dropna(subset=['subjChr'])
 
-# Create the plot with the specified size (12 inches width, 8 inches height)
+# Create the plot
 fig, ax = plt.subplots(figsize=(12, 8))
 plt.tight_layout(pad=4)
 
@@ -171,6 +173,7 @@ legend_elements = [
 plt.legend(handles=legend_elements, fontsize=12, loc='upper right')
 
 # Save and display the plot
+
 output_file = 'DMAG_T0vt2_EXP1_title.png'  # Replace with your desired filename and extension
 plt.savefig(output_file, dpi=600)
 plt.show()
