@@ -1,1 +1,17 @@
 
+# Plotting human data:
+
+DMAG_MAF.py # Chromosomal plots of variant data
+
+Files for plotting Retroseq outputs by donor with shapes/colours:
+GRCh38_chrom_length.txt
+GRCh38_genes
+TEs_counts_norm_chromlength.py
+centromere_grch38
+human_chromplot_fixedcols_shapes.py
+human_phenogram.py
+retroseq_donor.py
+retroseq_human.py
+
+
+venn_diagram_listprint.py # Plotting venn diagrams of overlapping gene sets
