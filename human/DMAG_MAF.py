@@ -1,4 +1,4 @@
-# Title: Plotting MAF on chromosomal plots
+# Title: Plotting MAF on chromosomal plots- zebrafish
 # Author: Dr. Alice M. Godden
 
 import matplotlib.pyplot as plt
