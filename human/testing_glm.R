@@ -1,33 +1,22 @@
-# Author : Sara Irish
+# Author : Sara Irish & Alice Godden
+# Title: GLMM analyses on TE counts that have been filtered for high coverage confident calls, and the experimental groups retain TEs not in the control sample
+
 library(dplyr)
-
 library(tidyr)
-
 library(lubridate)
-
 library(survival)
-
 library(survminer)
-
 library(ggplot2)
-
 library(dabestr)
-
 library(lme4)
-
 library(coxme)
-
 library(lmerTest)
-
 library(glmmTMB)
-
 library(emmeans)
-
 library(DHARMa)
-
 library(car)
 
-# Human Methylcellulose data
+
 
 # read in your data
 df <- read.csv("zebrafish_TE_counts.csv")
