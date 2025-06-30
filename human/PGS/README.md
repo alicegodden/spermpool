@@ -224,6 +224,7 @@ NR>1 {
 
 
 Now to match our vcf files rows with the overlapping loci of the PGSs in the downloaded and filtered tsv.bgz files:
+
 #!/bin/bash
 #SBATCH --job-name=match_aaf
 #SBATCH --output=logs/match_%A_%a.out
@@ -232,15 +233,14 @@ Now to match our vcf files rows with the overlapping loci of the PGSs in the dow
 #SBATCH --array=0-7219%300
 #SBATCH --mem=8G
 #SBATCH --time=07:00:00
-
 module load python/anaconda/2023.07/3.11.4
-
 FILES=($(ls *.tsv.bgz)) # Get list of files
 FILE="${FILES[$SLURM_ARRAY_TASK_ID]}"
 BASENAME=$(basename "$FILE" .tsv.bgz)
 
-
 python match_aaf_retain_all_tsv_columns.py "$FILE" "matched_parts/${BASENAME}_matched.tsv" # Run matching 
+
+
 
 match_aaf_retain_all_tsv_columns.py # this multiplies your AAF with beta_EUR to generate risk score for each phenotype
 
