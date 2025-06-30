@@ -1,5 +1,5 @@
 
-# Polygenic Risk Score (PRS) Analysis Pipeline
+# Polygenic Risk Score (PGS) Analysis Pipeline
 
 This repository outlines a pipeline for conducting Polygenic Risk Score (PRS) analysis, from initial BAM file processing and variant calling to PRS calculation and downstream analysis.
 
@@ -18,35 +18,40 @@ BAM files were generated with `mpileup` and `bcftools call`. The following comma
 ```bash
 bcftools mpileup -a AD,ADF,ADR -r "${ncbi_chr}" -q 30 -Q 30 -f /filepath/GRCh38_latest_genomic.fna "${bam_file}" | \
 bcftools call -mv -f GQ -Oz -o "$output_file"
+```
+
 1.2 Performing LiftOver to GRCh37
 Polygenic Risk Scores (PGS) are typically calculated against the GRCh37 reference genome. Since our BAM files were aligned to GRCh38, a LiftOver step is necessary to convert the VCFs to GRCh37 coordinates.
 
 First, ensure your GRCh37 reference genome (e.g., hg19.fa) is indexed:
 
-Bash
-
+```bash
 samtools faidx hg19.fa
+```
+
 And generate a sequence dictionary:
 
-Bash
-
+```bash
 gatk CreateSequenceDictionary \
   -R hg19.fa \
   -O hg19.fa.dict
+```
+
 Then, perform the LiftOver using GATK's LiftoverVcf:
 
-Bash
-
+```bash
 gatk LiftoverVcf \
   -I Sample_GRCh38_ensembl_renamed.vcf.gz \
   -O GRCh37_D1T0.vcf \
   -R Homo_sapiens.GRCh37.dna_sm.primary_assembly.fa \ # Reference: [https://ftp.ensembl.org/pub/grch37/current/fasta/homo_sapiens/dna/Homo_sapiens.GRCh37.dna_sm.primary_assembly.fa.gz](https://ftp.ensembl.org/pub/grch37/current/fasta/homo_sapiens/dna/Homo_sapiens.GRCh37.dna_sm.primary_assembly.fa.gz) (v2015-11-27)
   -CHAIN GRCh38_to_GRCh37.chain.gz \ # Obtained from: [https://ftp.ensembl.org/pub/assembly_mapping/homo_sapiens/](https://ftp.ensembl.org/pub/assembly_mapping/homo_sapiens/)
   -REJECT rejected.vcf
+```
+
 1.3 Renaming Chromosomes
 The LiftOver output VCF files may use RefSeq chromosome identifiers (e.g., "NC_"). The following sed script renames these to Ensembl-style (e.g., "1", "X", "Y"):
 
-Bash
+```bash
 
 bcftools view input.vcf.gz | \
 sed -e 's/^NC_000001.11/1/' \
@@ -74,12 +79,14 @@ sed -e 's/^NC_000001.11/1/' \
     -e 's/^NC_000023.11/X/' \
     -e 's/^NC_000024.10/Y/' | \
 bgzip > output.chromnames.vcf.gz
+```
+
 Step 2: Extracting Allele Frequencies
 This step extracts Alternate Allele Frequencies (AAF) from your VCF files. This is crucial for subsequent PRS calculations.
 
 The following bash script uses bcftools and awk to extract chromosome, position, reference allele, alternate allele, and the calculated AAF into a TSV file.
 
-Bash
+```bash
 
 #!/bin/bash
 
@@ -120,6 +127,8 @@ awk '
 ' > "$tsv_file"
 
 echo "Finished processing VCF file and writing to $tsv_file"
+```
+
 Step 3: Downloading and Processing PGS Files
 This step involves downloading a substantial dataset of Polygenic Score (PGS) files from the Pan-UK Biobank and filtering them to retain relevant columns for analysis.
 
@@ -128,7 +137,7 @@ PGS files were downloaded from the Pan-UK Biobank phenotype manifest, accessible
 
 The following Slurm-compatible bash script handles the parallel download and initial filtering of these files:
 
-Bash
+```bash
 
 #!/bin/bash
 #SBATCH --job-name=download_ukb
@@ -221,10 +230,12 @@ if ! process_file "${urls[$((SLURM_ARRAY_TASK_ID - 1))]}"; then # Process the UR
 fi
 
 echo "Finished processing task ${SLURM_ARRAY_TASK_ID}."
+```
+
 3.2 Filtering Downloaded PGS Files
 After downloading, the PGS .tsv.bgz files are further filtered to retain specific columns relevant for PRS calculation, including: chr, pos, ref, alt, beta_meta, beta_meta_hq, beta_EUR, and neglog10_pval_EUR.
 
-Bash
+```bash
 
 zcat categorical-6141-both_sexes-8.tsv.bgz | awk -F'\t' -v OFS='\t' '
 NR==1 {
