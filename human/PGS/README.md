@@ -36,6 +36,7 @@ gatk CreateSequenceDictionary \
 ```
 
 Then, perform the LiftOver using GATK's LiftoverVcf:
+
 ```bash
 gatk LiftoverVcf \
   -I Sample_GRCh38_ensembl_renamed.vcf.gz \
@@ -43,6 +44,7 @@ gatk LiftoverVcf \
   -R Homo_sapiens.GRCh37.dna_sm.primary_assembly.fa \ # Reference: [https://ftp.ensembl.org/pub/grch37/current/fasta/homo_sapiens/dna/Homo_sapiens.GRCh37.dna_sm.primary_assembly.fa.gz](https://ftp.ensembl.org/pub/grch37/current/fasta/homo_sapiens/dna/Homo_sapiens.GRCh37.dna_sm.primary_assembly.fa.gz) (v2015-11-27)
   -CHAIN GRCh38_to_GRCh37.chain.gz \ # Obtained from: [https://ftp.ensembl.org/pub/assembly_mapping/homo_sapiens/](https://ftp.ensembl.org/pub/assembly_mapping/homo_sapiens/)
   -REJECT rejected.vcf
+```
 
 #### 1.3 Renaming Chromosomes
 The LiftOver output VCF files may use RefSeq chromosome identifiers (e.g., "NC_"). The following sed script renames these to Ensembl-style (e.g., "1", "X", "Y"):
