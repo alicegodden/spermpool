@@ -8,6 +8,9 @@ fish_phenogram.py # Plotting sperm pools data from variant calling pipeline
 autobubble_goplot.py # Uses a ShinyGo csv file as input to automate and control bubble plots in python
 
 # Retroseq analysis
+
+testing_glm.R # For GLM analysis of TE counts that have been filtered for read count and high confidence, and have had the control group TEs removed in the experimental groups
+
 For Retroseq derived input vcf files:
 phenogram.py # Phenogram plotting with chromatin accessibility, gene labels, centromere locations etc.
 
