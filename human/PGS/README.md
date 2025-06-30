@@ -14,6 +14,7 @@ This initial step involves processing BAM files to generate VCFs, performing a `
 
 BAM files were generated with `mpileup` and `bcftools call`. The following command shows how to generate VCF files from your aligned BAMs:
 
+
 ```bash
 bcftools mpileup -a AD,ADF,ADR -r "${ncbi_chr}" -q 30 -Q 30 -f /filepath/GRCh38_latest_genomic.fna "${bam_file}" | \
 bcftools call -mv -f GQ -Oz -o "$output_file"
