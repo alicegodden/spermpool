@@ -17,7 +17,7 @@ BAM files were generated with `mpileup` and `bcftools call`. The following comma
 ```bash
 bcftools mpileup -a AD,ADF,ADR -r "${ncbi_chr}" -q 30 -Q 30 -f /filepath/GRCh38_latest_genomic.fna "${bam_file}" | \
 bcftools call -mv -f GQ -Oz -o "$output_file"
-```bash
+```
 
 
 1.2 Performing LiftOver to GRCh37
@@ -26,10 +26,12 @@ Polygenic Risk Scores (PGS) are typically calculated against the GRCh37 referenc
 First, ensure your GRCh37 reference genome (e.g., hg19.fa) is indexed:
 ```bash
 samtools faidx hg19.fa
+```
 
 And generate a sequence dictionary:
 ```bash
 gatk CreateSequenceDictionary \
   -R hg19.fa \
   -O hg19.fa.dict
+```
 
