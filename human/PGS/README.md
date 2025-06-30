@@ -17,6 +17,8 @@ BAM files were generated with `mpileup` and `bcftools call`. The following comma
 ```bash
 bcftools mpileup -a AD,ADF,ADR -r "${ncbi_chr}" -q 30 -Q 30 -f /filepath/GRCh38_latest_genomic.fna "${bam_file}" | \
 bcftools call -mv -f GQ -Oz -o "$output_file"
+```bash
+
 
 1.2 Performing LiftOver to GRCh37
 Polygenic Risk Scores (PGS) are typically calculated against the GRCh37 reference genome. Since our BAM files were aligned to GRCh38, a LiftOver step is necessary to convert the VCFs to GRCh37 coordinates.
