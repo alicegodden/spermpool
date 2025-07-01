@@ -20,7 +20,7 @@ bcftools mpileup -a AD,ADF,ADR -r "${ncbi_chr}" -q 30 -Q 30 -f /filepath/GRCh38_
 bcftools call -mv -f GQ -Oz -o "$output_file"
 ```
 
-1.2 Performing LiftOver to GRCh37
+#### 1.2 Performing LiftOver to GRCh37
 Polygenic Risk Scores (PGS) are typically calculated against the GRCh37 reference genome. Since our BAM files were aligned to GRCh38, a LiftOver step is necessary to convert the VCFs to GRCh37 coordinates.
 
 First, ensure your GRCh37 reference genome (e.g., hg19.fa) is indexed:
@@ -48,7 +48,7 @@ gatk LiftoverVcf \
   -REJECT rejected.vcf
 ```
 
-1.3 Renaming Chromosomes
+#### 1.3 Renaming Chromosomes
 The LiftOver output VCF files may use RefSeq chromosome identifiers (e.g., "NC_"). The following sed script renames these to Ensembl-style (e.g., "1", "X", "Y"):
 
 ```bash
@@ -81,7 +81,7 @@ sed -e 's/^NC_000001.11/1/' \
 bgzip > output.chromnames.vcf.gz
 ```
 
-Step 2: Extracting Allele Frequencies
+### Step 2: Extracting Allele Frequencies
 This step extracts Alternate Allele Frequencies (AAF) from your VCF files. This is crucial for subsequent PRS calculations.
 
 The following bash script uses bcftools and awk to extract chromosome, position, reference allele, alternate allele, and the calculated AAF into a TSV file.
@@ -129,10 +129,10 @@ awk '
 echo "Finished processing VCF file and writing to $tsv_file"
 ```
 
-Step 3: Downloading and Processing PGS Files
+### Step 3: Downloading and Processing PGS Files
 This step involves downloading a substantial dataset of Polygenic Score (PGS) files from the Pan-UK Biobank and filtering them to retain relevant columns for analysis.
 
-3.1 Downloading PGS Files
+#### 3.1 Downloading PGS Files
 PGS files were downloaded from the Pan-UK Biobank phenotype manifest, accessible here. The URLs for these files are stored in a file named urls.txt.
 
 The following Slurm-compatible bash script handles the parallel download and initial filtering of these files:
@@ -232,7 +232,7 @@ fi
 echo "Finished processing task ${SLURM_ARRAY_TASK_ID}."
 ```
 
-3.2 Filtering Downloaded PGS Files
+#### 3.2 Filtering Downloaded PGS Files
 After downloading, the PGS .tsv.bgz files are further filtered to retain specific columns relevant for PRS calculation, including: chr, pos, ref, alt, beta_meta, beta_meta_hq, beta_EUR, and neglog10_pval_EUR.
 
 ```bash
@@ -256,7 +256,7 @@ NR>1 {
 ```
 
 
-###### Step 4: Matching VCF and PGS Data
+### Step 4: Matching VCF and PGS Data
 This step involves matching the loci in your sample VCF files with the overlapping loci in the downloaded and filtered PGS .tsv.bgz files. This is a crucial step for preparing the data for PRS calculation.
 
 The following Slurm-compatible bash script iterates through the filtered PGS files and executes a Python script to perform the matching.
@@ -282,7 +282,7 @@ python match_aaf_retain_all_tsv_columns.py "$FILE" "matched_parts/${BASENAME}_ma
 
 The match_aaf_retain_all_tsv_columns.py script is responsible for this matching process. It multiplies the Alternate Allele Frequency (AAF) from your VCFs with the beta_EUR value from the PGS files to generate a risk score for each phenotype.
 
-# Analysis in Python
+### Analysis in Python
 This section outlines the Python scripts used for further analysis of the calculated polygenic risk scores.
 
 phenocodes: Contains all the phenotype codes and their descriptions/associated files. This can be a text file or a small script to manage this information.
