@@ -143,7 +143,7 @@ The following Slurm-compatible bash script handles the parallel download and ini
 #SBATCH --job-name=download_ukb
 #SBATCH --output=download_%a.out
 #SBATCH --error=download_%a.err
-#SBATCH -p compute-64-512
+#SBATCH -p compute
 #SBATCH --array=1-7228%100
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
