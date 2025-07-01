@@ -282,13 +282,9 @@ python match_aaf_retain_all_tsv_columns.py "$FILE" "matched_parts/${BASENAME}_ma
 
 The match_aaf_retain_all_tsv_columns.py script is responsible for this matching process. It multiplies the Alternate Allele Frequency (AAF) from your VCFs with the beta_EUR value from the PGS files to generate a risk score for each phenotype.
 
-### Analysis in Python
+### Analysis in R
 This section outlines the Python scripts used for further analysis of the calculated polygenic risk scores.
 
 phenocodes: Contains all the phenotype codes and their descriptions/associated files. This can be a text file or a small script to manage this information.
 
-raw_pgs_score_normalised_heatmap.py: Generates a heatmap plotting z-score normalized 99th percentile data for polygenic risk scores, useful for visualizing score distributions.
-
-subtract.py: A script for subtracting treatment from control polygenic risk scores, likely used for comparative analysis between groups.
-
-histograms...
+PGS.Rmd # R notebook with all plotting scripts
