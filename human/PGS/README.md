@@ -287,4 +287,8 @@ This section outlines the Python scripts used for further analysis of the calcul
 
 phenocodes: Contains all the phenotype codes and their descriptions/associated files. This can be a text file or a small script to manage this information.
 
-PGS.Rmd # R notebook with all plotting scripts
+phenotype_score_difference_positive.R # Plotting traits with a PGS score above 0, showing the top 40 PGS scored traits
+
+histogram.R, histogram_raw_score.R,  histogram_raw_score_MC.R # histogram plotting raw and difference of PGS with different input file handling
+
+heatmap.R # Plotting heatmaps
