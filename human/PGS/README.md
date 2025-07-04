@@ -293,4 +293,6 @@ histogram.R, histogram_raw_score.R,  histogram_raw_score_MC.R # histogram plotti
 
 heatmap.R # Plotting heatmaps
 
+dumbbell_Custom_chunks.R # Dumbbell plots
+
 epistatic_interactions.R # Pearson correlation coefficient analysis of traits
