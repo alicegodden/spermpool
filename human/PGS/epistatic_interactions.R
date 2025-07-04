@@ -1,649 +1,527 @@
-# PGS Score Change Scatter Plots (Dumbbell Plots), Cross-Phenotype Correlation Analysis,
-# and Single Top Negative Correlation Scatter Plot
+import pandas as pd
+import numpy as np
+import os
+import re
+from scipy.stats import pearsonr
+import itertools
+import matplotlib.pyplot as plt
+import seaborn as sns
+from statsmodels.stats.multitest import multipletests
 
-# --- INSTALL & LOAD NECESSARY LIBRARIES ---
-# Ensure patchwork, Hmisc, corrplot, and tibble are installed
-if (!requireNamespace("patchwork", quietly = TRUE)) {
-  install.packages("patchwork")
-}
-if (!requireNamespace("Hmisc", quietly = TRUE)) {
-  install.packages("Hmisc")
-}
-if (!requireNamespace("corrplot", quietly = TRUE)) {
-  install.packages("corrplot")
-}
-if (!requireNamespace("tibble", quietly = TRUE)) { # Added tibble
-  install.packages("tibble")
-}
-library(dplyr)      # For data manipulation
-library(readr)      # For reading data (read_tsv)
-library(ggplot2)    # For plotting
-library(stringr)    # For string manipulation
-library(tools)      # For file path manipulation (basename)
-library(tidyr)      # For pivot_longer, pivot_wider
-library(purrr)      # For reduce (to combine data frames efficiently)
-library(patchwork)  # For combining plots
-library(Hmisc)      # For rcorr (correlation matrix with p-values)
-library(corrplot)   # For visualizing correlation matrix
-library(tibble)     # For column_to_rownames
+# --- Configuration ---
+INPUT_DIR = '.'  # Current directory
+PHENOCODES_FILE = 'phenocodes'  # File containing phenotype code mappings
+# List of input score files
+INPUT_FILES = [
+    'GRCh37_D1T0_merged.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz',
+    'GRCh37_D1T4_merged.dedup_RG_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz',
+    'GRCh37_D2T0_merged.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz',
+    'GRCh37_D2T4_merged.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz',
+    'GRCh37_D4T0_merged.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz',
+    'GRCh37_D4T4_merged.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz',
+    'GRCh37_D6T0a_merged.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz',
+    'GRCh37_D6T4a_merged.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz',
+    'GRCh37_D6T0b_merged.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz',
+    'GRCh37_D6T4b_merged.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz'
+]
 
-# --- SET WORKING DIRECTORY ---
-# <<< IMPORTANT: Adjust this path to where your input files and phenocodes file are located >>>
-setwd("~/PycharmProjects/polygenic/PGS_scores_test/SU/T0")  
+# Regex to extract SampleID from filename, e.g., 'D1T0', 'D1T4', 'D6T0a', 'D6T4b'
+# This pattern is more robust to handle D#T# and D#T#a/b formats
+sample_id_pattern = re.compile(r'GRCh37_(D\d+T[04][ab]?)_merged')
 
-# --- CONFIGURATION ---
-# >>> IMPORTANT: Adjust these to match your actual file structure and desired behavior <<<
+OUTPUT_CORR_MATRIX_R = 'pearson_r_matrix_change_scores.tsv'
+OUTPUT_CORR_MATRIX_P = 'pearson_p_matrix_change_scores.tsv'
+OUTPUT_SIGNIFICANT_PAIRS = 'significant_correlations_change_scores_SU.tsv'
+OUTPUT_HEATMAP_R = 'correlation_heatmap_R_su.png'
+OUTPUT_HEATMAP_P = 'correlation_heatmap_P_su.png'
 
-# Input files (raw score .tsv.gz files, assumed to be paired C, O, C, O...)
-input_files <- c(
-  "GRCh37_D1T0_merged.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz",
-  "GRCh37_D1T4_merged.dedup_RG_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz",
-  "GRCh37_D2T0_merged.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz",
-  "GRCh37_D2T4_merged.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz",
-  "GRCh37_D4T0_merged.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz",
-  "GRCh37_D4T4_merged.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz",
-  "GRCh37_D6T0a_merged.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz",
-  "GRCh37_D6T4a_merged.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz",
-  "GRCh37_D6T0b_merged.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz",
-  "GRCh37_D6T4b_merged.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz"  
-)
+P_VALUE_THRESHOLD = 0.05
+FDR_THRESHOLD = 0.05  # For False Discovery Rate correction
+TOP_PHENOTYPES_COUNT = 30  # Number of top phenotypes to select for global correlation
 
-# Path to your phenocodes file (should contain 'filename' and 'description' columns)
-phenocodes_path <- "phenocodes"  
 
-# Output composite plot filename for Dumbbell plots
-output_composite_dumbbell_plot_filename <- "PGS_Change_Dumbbell_Composite_PerPairTopPhenotypes.png"  
+# --- Functions ---
 
-# Output filename for Correlation Heatmap
-output_correlation_heatmap_filename <- "PGS_Change_Correlation_Heatmap_TopPhenotypes.png"
+def load_phenocodes(filepath):
+    """Loads phenocode mappings from a file."""
+    try:
+        phenocodes_df = pd.read_csv(filepath, sep='\t', header=None, names=['Phenotype_Code', 'Phenotype_Label'])
+        print(f"  - Successfully loaded phenocodes. Rows: {phenocodes_df.shape[0]}, Cols: {phenocodes_df.shape[1]}")
+        return phenocodes_df
+    except FileNotFoundError:
+        print(f"Error: Phenocodes file not found at {filepath}")
+        return None
+    except Exception as e:
+        print(f"Error loading phenocodes file: {e}")
+        return None
 
-# Output filename for the single most negatively correlated scatter plot
-output_single_scatter_plot_filename <- "PGS_Change_TopNegativeCorrelation_Scatter.png"
 
-# Trait selection parameters for Dumbbell Plots (per-pair)
-PERCENTILE_THRESHOLD <- 99 # Filter by top N percentile of absolute differences (now per pair)
-MAX_TRAITS_TO_PLOT_DUMBBELL <- 15    # Cap for readability on individual dumbbell plots
+def extract_sample_id(filename):
+    """Extracts SampleID (e.g., D1T0, D2T4, D6T0a) from the filename."""
+    match = sample_id_pattern.search(filename)
+    if match:
+        extracted_id = match.group(1)
+        return extracted_id
+    else:
+        return None
 
-# Trait selection parameters for Correlation Analysis (global)
-MAX_TRAITS_FOR_CORRELATION <- 30 # Number of top phenotypes to include in correlation analysis
 
-# --- CONFIGURABLE COLUMN NAMES IN YOUR INPUT TSV.GZ FILES ---
-# !!! IMPORTANT: Adjust these to match the actual column names in your files !!!
-PHENOTYPE_COL_NAME <- "match_file"  
-SCORE_COL_NAME <- "product_total"  
+def load_and_process_scores(filepath, phenocodes_df):
+    """Loads a single score file, maps phenocodes, and handles duplicates."""
+    sample_id = extract_sample_id(os.path.basename(filepath))
+    if sample_id is None:
+        print(f"  - Warning: Could not extract SampleID from filename '{os.path.basename(filepath)}'. Skipping.")
+        return pd.DataFrame()  # Return empty DataFrame if SampleID cannot be extracted
 
-# --- HELPER FUNCTION TO EXTRACT INDIVIDUAL ID FROM FILENAME ---
-# This function extracts the ID used for SampleID (e.g., D1T0, D6T0a, D6T0b)
-extract_individual_id <- function(filepath) {
-  filename <- basename(filepath)
-  # Split the filename by underscore and take the second element.
-  id <- str_split_i(filename, "_", 2)
-  return(id)
-}
+    try:
+        df = pd.read_csv(filepath, sep='\t', compression='gzip')
+        # Renaming 'match_file' to 'Phenotype_Code' and 'product_total' to 'Score'
+        df.rename(columns={'match_file': 'Phenotype_Code', 'product_total': 'Score'}, inplace=True)
 
-# --- HELPER FUNCTION TO CLEAN TRAIT LABELS (Python-style) ---
-clean_label_python <- function(label) {
-  label_str <- as.character(label)
-  label_str <- str_replace(label_str, "_filtered\\.tsv\\.bgz", "")
-  parts <- str_split(label_str, "-both_sexes", simplify = TRUE)
-  return(parts[, 1])
-}
+        # Merge with phenocodes to get labels
+        df = pd.merge(df, phenocodes_df, on='Phenotype_Code', how='left')
 
-# --- NEW HELPER FUNCTION: Crop string to the Nth underscore ---
-crop_to_nth_underscore <- function(text, n) {
-  if (is.na(text)) return(NA)
-  parts <- str_split(text, "_")[[1]]
-  if (length(parts) <= n) {
-    return(text)
-  } else {
-    return(paste(parts[1:n], collapse = "_"))
-  }
-}
+        # Handle cases where Phenotype_Code might not have a label
+        # FIX: Address FutureWarning by not using inplace=True with chained assignment
+        df['Phenotype_Label'] = df['Phenotype_Label'].fillna(df['Phenotype_Code'])
 
-# --- MAIN DATA PROCESSING FUNCTION FOR A SINGLE RAW SCORE FILE ---
-# Reads one .tsv.gz file, cleans phenotype labels, and attaches SampleID
-process_single_raw_score_file <- function(filepath, phenotype_col_name, score_col_name, phenocodes_df, verbose = TRUE) {
-  
-  sample_id <- extract_individual_id(filepath)
-  
-  tryCatch({
-    df_raw <- read_tsv(filepath, show_col_types = FALSE)
-    
-    required_cols <- c(phenotype_col_name, score_col_name)
-    if (!all(required_cols %in% colnames(df_raw))) {
-      stop(paste0("Missing required columns (", paste(required_cols, collapse = ", "), ") in ", filepath,
-                  "\n  Found columns: ", paste(colnames(df_raw), collapse = ", ")))
-    }
-    
-    df_processed <- df_raw %>%
-      select(match_file = !!sym(phenotype_col_name), Score = !!sym(score_col_name)) %>%
-      filter(!is.na(Score) & !is.infinite(Score) & !is.nan(Score))
-    
-    if (nrow(df_processed) == 0) {
-      if (verbose) message(paste("  - Warning: No valid score data in '", filepath, "' after cleaning. Skipping."))
-      return(NULL)
-    }
-    
-    # Generate the base cleaned label (e.g., "UKB_B_N3_FSH")
-    df_processed <- df_processed %>%
-      mutate(
-        label_clean_base = clean_label_python(match_file),
-        # Apply the new cropping rule to the base label for the code part of the final Phenotype_Label
-        cropped_code_label = sapply(label_clean_base, crop_to_nth_underscore, n = 3),
-        filename_clean = str_replace(match_file, "_filtered\\.tsv\\.bgz", ".tsv.bgz")
-      )
-    
-    # Merge with phenocodes for descriptive labels
-    merged_df <- df_processed %>%
-      left_join(phenocodes_df, by = c("filename_clean" = "filename")) %>%
-      mutate(
-        # Construct the final Phenotype_Label using the cropped code and description
-        Phenotype_Label = ifelse(
-          !is.na(description),
-          paste0(cropped_code_label, " → ", description), # Cropped code + description
-          cropped_code_label  # Fallback to cropped code if no description
-        )
-      )
-    
-    # Handle duplicate trait labels by taking mean score (if any)
-    if (any(duplicated(merged_df$Phenotype_Label))) {
-      if (verbose) message(paste0("  - Warning: Duplicate trait labels found in ", filepath, ". Taking mean score for duplicates."))
-      merged_df <- merged_df %>%
-        group_by(Phenotype_Label) %>%
-        summarise(Score = mean(Score, na.rm = TRUE), .groups = 'drop')
-    }
-    
-    merged_df$SampleID <- sample_id
-    
-    return(merged_df %>% select(Phenotype_Label, Score, SampleID))
-    
-  }, error = function(e) {
-    if (verbose) message(paste("  - An error occurred while reading file", filepath, ":", e$message))
-    return(NULL)
-  })
-}
+        # Check for and handle duplicate trait labels for the same SampleID
+        duplicate_labels = df.duplicated(subset=['Phenotype_Label'], keep=False)
+        if duplicate_labels.any():
+            print(
+                f"  - Warning: Duplicate trait labels found in {os.path.basename(filepath)}. Taking mean score for duplicates.")
+            df = df.groupby('Phenotype_Label')['Score'].mean().reset_index()
 
-# --- LOAD PHENOCODES ---
-message(paste0("\n--- Loading phenocodes from: ", phenocodes_path, " ---"))
-tryCatch({
-  phenos <- read_tsv(phenocodes_path, show_col_types = FALSE)
-  message(paste0("  - Successfully loaded phenocodes. Rows: ", nrow(phenos), ", Cols: ", ncol(phenos)))
-  if (!all(c('filename', 'description') %in% colnames(phenos))) {
-    stop(paste0("Error: 'filename' or 'description' column missing in '", phenocodes_path, "'. Please check phenocodes file."))
-  }
-}, error = function(e) {
-  stop(paste0("Error loading phenocodes: ", e$message))
-})
+        df['SampleID'] = sample_id
+        return df
+    except Exception as e:
+        print(f"Error processing file {os.path.basename(filepath)}: {e}")
+        return pd.DataFrame()
 
-# --- MAIN PROCESSING: Read All Data ---
-message("\n--- Reading all raw score data from input files ---")
-all_raw_data_long <- data.frame()
 
-if (length(input_files) == 0) {
-  stop("Error: No input files specified in the 'input_files' list. Exiting.")
-}
-if (length(input_files) %% 2 != 0) {
-  stop("Error: Input files list must contain an even number of files for paired analysis (C, O, C, O...).")
-}
+def calculate_change_scores(all_raw_data_long):
+    """
+    Restructures the data and calculates change scores (T4 - T0) for each donor and phenotype.
+    Handles 'D#T#a/b' as distinct donor identifiers for pairing.
+    """
+    # Create a unique donor identifier that handles 'D1', 'D6a', 'D6b' etc.
+    # This extracts 'D1', 'D6a', 'D6b' from 'D1T0', 'D6T0a', 'D6T0b' etc.
+    all_raw_data_long['donor_id_for_pairing'] = all_raw_data_long['SampleID'].str.replace('T0', '').str.replace('T4',
+                                                                                                                '')
+    all_raw_data_long['Timepoint'] = all_raw_data_long['SampleID'].str.extract(r'(T[04][ab]?)')
 
-for (filepath in input_files) {
-  if (file.exists(filepath)) {
-    message(paste0("  - Processing '", filepath, "'..."))
-    processed_df <- process_single_raw_score_file(
-      filepath = filepath,
-      phenotype_col_name = PHENOTYPE_COL_NAME,
-      score_col_name = SCORE_COL_NAME,
-      phenocodes_df = phenos,
-      verbose = TRUE  
+    # Pivot the table to get T0 and T4 (and a/b variants) scores side-by-side
+    df_pivot_revised = all_raw_data_long.pivot_table(
+        index=['donor_id_for_pairing', 'Phenotype_Label'],
+        columns='Timepoint',
+        values='Score'
+    ).reset_index()
+
+    merged_scores = pd.DataFrame()
+
+    # List of timepoint pairs to look for
+    timepoint_pairs = [('T0', 'T4'), ('T0a', 'T4a'), ('T0b', 'T4b')]
+
+    for t0_col, t4_col in timepoint_pairs:
+        if t0_col in df_pivot_revised.columns and t4_col in df_pivot_revised.columns:
+            temp_df = df_pivot_revised[['donor_id_for_pairing', 'Phenotype_Label', t0_col, t4_col]].copy()
+            temp_df['Change_Score'] = temp_df[t4_col] - temp_df[t0_col]
+            temp_df.rename(columns={t0_col: 'T0', t4_col: 'T4'}, inplace=True)  # Standardize column names
+            merged_scores = pd.concat([merged_scores, temp_df], ignore_index=True)
+
+    # Ensure df_paired_scores is always defined, even if empty
+    df_paired_scores = merged_scores.dropna(subset=['Change_Score'])
+
+    # Ensure 'donor_id' column is present as 'donor_id_for_pairing' for consistency downstream
+    df_paired_scores.rename(columns={'donor_id_for_pairing': 'donor_id'}, inplace=True)
+
+    print(f"  - Data restructured. Total paired change score entries: {df_paired_scores.shape[0]}")
+
+    return df_paired_scores
+
+
+def generate_heatmaps(R_matrix, P_matrix, output_r_path, output_p_path, top_phenotypes):
+    """Generates and saves heatmaps for R and P matrices."""
+
+    # Filter matrices to include only the top phenotypes
+    R_matrix_filtered = R_matrix.loc[top_phenotypes, top_phenotypes]
+    P_matrix_filtered = P_matrix.loc[top_phenotypes, top_phenotypes]
+
+    plt.figure(figsize=(16, 14))
+    sns.heatmap(R_matrix_filtered, annot=False, cmap='coolwarm', fmt=".2f", linewidths=.5)
+    plt.title('Pearson Correlation (R) Matrix of Change Scores (Top Phenotypes)')
+    plt.tight_layout()
+    plt.savefig(output_r_path)
+    plt.close()
+    print(f"  - R-value heatmap saved to {output_r_path}")
+
+    plt.figure(figsize=(16, 14))
+    sns.heatmap(P_matrix_filtered, annot=False, cmap='viridis_r', fmt=".2e",
+                linewidths=.5)  # Use _r for lower p to be darker
+    plt.title('P-value Matrix of Change Scores (Top Phenotypes)')
+    plt.tight_layout()
+    plt.savefig(output_p_path)
+    plt.close()
+    print(f"  - P-value heatmap saved to {output_p_path}")
+
+
+# --- Main Script ---
+if __name__ == "__main__":
+    print(f"DEBUG: Current working directory: {os.getcwd()}")
+    print(f"DEBUG: Input files to load: {', '.join(INPUT_FILES)}")
+
+    # 1. Load Phenocodes
+    print("\n--- Loading phenocodes from: phenocodes ---")
+    phenocodes_df = load_phenocodes(os.path.join(INPUT_DIR, PHENOCODES_FILE))
+    if phenocodes_df is None:
+        exit("Exiting due to phenocodes loading error.")
+
+    # 2. Read all raw score data
+    print("\n--- Reading all raw score data from input files ---")
+    all_raw_data_list = []
+    for f in INPUT_FILES:
+        full_path = os.path.join(INPUT_DIR, f)
+        processed_df = load_and_process_scores(full_path, phenocodes_df)
+        if not processed_df.empty:
+            all_raw_data_list.append(processed_df)
+
+    if not all_raw_data_list:
+        exit("No valid score data loaded. Exiting.")
+
+    all_raw_data_long = pd.concat(all_raw_data_list, ignore_index=True)
+    print(f"  - Total raw data rows loaded: {all_raw_data_long.shape[0]}")
+
+    # 3. Calculate Change Scores
+    print("\n--- Starting Cross-Phenotype Correlation Analysis of Change Scores ---")
+    print("  - Restructuring data to calculate change scores per donor and phenotype...")
+    df_paired_scores = calculate_change_scores(all_raw_data_long)
+
+    if df_paired_scores.empty:
+        exit("No paired change scores found. Cannot perform correlation. Exiting.")
+
+    # Pivot to wide format for correlation, with donors as rows and phenotypes as columns
+    # The 'donor_id' column is now the combined 'D#', 'D#a', 'D#b' from `calculate_change_scores`
+    df_change_scores_wide = df_paired_scores.pivot(
+        index='donor_id',
+        columns='Phenotype_Label',
+        values='Change_Score'
     )
-    if (!is.null(processed_df)) {
-      all_raw_data_long <- bind_rows(all_raw_data_long, processed_df)
-    }
-  } else {
-    message(paste0("Warning: Input file not found: '", filepath, "'. Skipping."))
-  }
-}
 
-if (nrow(all_raw_data_long) == 0) {
-  stop("No data loaded from any input files. Please check file paths and ensure required columns are present and correctly named.")
-}
+    # 4. Select top phenotypes for analysis (e.g., those with most data points or largest variance)
+    # For simplicity, selecting phenotypes with the most non-NA change scores across donors
+    print("  - Selecting top phenotypes for global correlation analysis...")
+    phenotype_completeness = df_change_scores_wide.count().sort_values(ascending=False)
 
-# --- Filter out specific phenotypes ---
-message("\n--- Filtering out unwanted phenotypes ---")
-initial_pheno_count <- length(unique(all_raw_data_long$Phenotype_Label))
+    # Filter to phenotypes that have at least 2 non-NaN values for correlation calculation
+    eligible_phenotypes = phenotype_completeness[phenotype_completeness >= 2].index
 
-# Define the pattern for terms to remove, separated by '|' for OR logic in regex
-terms_to_remove_pattern <- "Place of birth|television|Nap|Getting up|Z34|Alcohol|Time spent using computer|Hot drink|Lifetime number of sexual partners|fruit|Lamb|Worry|Cereal|PM: final answer"
+    if len(eligible_phenotypes) == 0:
+        exit("No phenotypes with sufficient data points (at least 2 donors) for correlation. Exiting.")
 
-all_raw_data_long <- all_raw_data_long %>%
-  filter(!str_detect(Phenotype_Label, terms_to_remove_pattern))
+    # Prioritize eligible phenotypes
+    top_phenotypes_to_consider = eligible_phenotypes[:TOP_PHENOTYPES_COUNT].tolist()
 
-filtered_pheno_count <- length(unique(all_raw_data_long$Phenotype_Label))
-message(paste0("  - Removed phenotypes containing: '", gsub("\\|", "', '", terms_to_remove_pattern), "'. Initial unique phenotypes: ", initial_pheno_count, ", After filter: ", filtered_pheno_count, "."))
+    # Filter df_change_scores_wide to only include these top phenotypes
+    df_change_scores_wide = df_change_scores_wide[top_phenotypes_to_consider]
+
+    print(f"  - Selected {df_change_scores_wide.shape[1]} top phenotypes for correlation.")
+
+    # 5. Perform Correlation Analysis
+    print("  - Calculating Pearson correlation matrix and p-values...")
+
+    # Calculate Pearson R matrix using pandas built-in .corr()
+    R_matrix = df_change_scores_wide.corr(method='pearson')
+
+    # Calculate P-value matrix manually using scipy.stats.pearsonr
+    pheno_cols = df_change_scores_wide.columns
+    P_matrix = pd.DataFrame(np.nan, index=pheno_cols, columns=pheno_cols)  # Initialize P-value matrix with NaN
+
+    # Store all p-values for FDR correction
+    all_p_values_for_fdr = []
+
+    # Generate unique pairs for p-value calculation
+    unique_pairs = list(itertools.combinations(pheno_cols, 2)) + [(col, col) for col in pheno_cols]
+
+    for col1_name, col2_name in unique_pairs:
+        # Extract data for the current pair, ensuring it's a Series
+        series1 = df_change_scores_wide[col1_name].dropna()
+        series2 = df_change_scores_wide[col2_name].dropna()
+
+        # Find common indices (donors) that have valid data for both series
+        common_donors = series1.index.intersection(series2.index)
+
+        if len(common_donors) >= 2:  # Pearsonr requires at least 2 data points with common observations
+            data1 = series1.loc[common_donors]
+            data2 = series2.loc[common_donors]
+
+            _, p_value = pearsonr(data1, data2)
+
+            # Ensure p_value is a scalar float
+            if isinstance(p_value, (np.ndarray, pd.Series)) and p_value.ndim == 0:
+                p_value = p_value.item()  # Extract scalar from 0-dim array/series
+            elif not isinstance(p_value, (float, np.floating)):
+                print(
+                    f"ERROR: Unexpected p_value type from pearsonr: {type(p_value)} for {col1_name} vs {col2_name}. Setting to NaN.")
+                p_value = np.nan  # Fallback if p_value is not a float or 0-dim numpy array
+
+            P_matrix.loc[col1_name, col2_name] = float(p_value)  # Ensure final assignment is float
+            P_matrix.loc[col2_name, col1_name] = float(p_value)  # Fill the symmetrical position
+
+            if col1_name != col2_name:  # Only add unique off-diagonal p-values for FDR
+                all_p_values_for_fdr.append(p_value)
+
+        elif col1_name == col2_name:  # For self-correlation (diagonal), p-value is 0.0
+            P_matrix.loc[col1_name, col2_name] = 0.0
+
+            # 6. Apply FDR Correction
+    print(f"  - Applying FDR correction (Benjamini-Hochberg) with alpha = {FDR_THRESHOLD}...")
+    if all_p_values_for_fdr:
+        # Note: For simplicity and based on previous discussions, the significant correlations
+        # table and heatmaps still use raw p-values. If you need a fully FDR-corrected
+        # P_matrix or significance table, the mapping back from pvals_corrected to
+        # the specific pairs would need to be implemented.
+        reject, pvals_corrected, _, _ = multipletests(all_p_values_for_fdr, alpha=FDR_THRESHOLD, method='fdr_bh')
+        # You could use `reject` here to filter significant pairs if needed for a separate output.
+
+    # 7. Report Significant Correlations (based on P_VALUE_THRESHOLD)
+    print(f"  - Reporting significant correlations (P < {P_VALUE_THRESHOLD})...")
+    significant_correlations = []
+    for i in range(len(pheno_cols)):
+        for j in range(i + 1, len(pheno_cols)):  # Only check upper triangle to avoid duplicates and self-correlation
+            col1_name = pheno_cols[i]
+            col2_name = pheno_cols[j]
+
+            p_value = P_matrix.loc[col1_name, col2_name]
+            r_value = R_matrix.loc[col1_name, col2_name]
+
+            if not pd.isna(p_value) and p_value < P_VALUE_THRESHOLD:
+                significant_correlations.append({
+                    'Phenotype_1': col1_name,
+                    'Phenotype_2': col2_name,
+                    'Pearson_R': r_value,
+                    'P_Value': p_value
+                })
+
+    df_significant = pd.DataFrame(significant_correlations)
+    if not df_significant.empty:
+        df_significant = df_significant.sort_values(by='P_Value')
+        df_significant.to_csv(os.path.join(INPUT_DIR, OUTPUT_SIGNIFICANT_PAIRS), sep='\t', index=False)
+        print(f"  - Significant correlations saved to {os.path.join(INPUT_DIR, OUTPUT_SIGNIFICANT_PAIRS)}")
+    else:
+        print("  - No significant correlations found at the specified P-value threshold.")
+
+    # 8. Save Correlation Matrices
+    R_matrix.to_csv(os.path.join(INPUT_DIR, OUTPUT_CORR_MATRIX_R), sep='\t')
+    P_matrix.to_csv(os.path.join(INPUT_DIR, OUTPUT_CORR_MATRIX_P), sep='\t')
+    print(f"  - Pearson R matrix saved to {os.path.join(INPUT_DIR, OUTPUT_CORR_MATRIX_R)}")
+    print(f"  - P-value matrix saved to {os.path.join(INPUT_DIR, OUTPUT_CORR_MATRIX_P)}")
+
+    # 9. Generate Heatmaps
+    print("\n--- Generating Heatmaps ---")
+    if len(top_phenotypes_to_consider) > 1:  # Need at least 2 phenotypes for a meaningful heatmap
+        generate_heatmaps(R_matrix, P_matrix,
+                          os.path.join(INPUT_DIR, OUTPUT_HEATMAP_R),
+                          os.path.join(INPUT_DIR, OUTPUT_HEATMAP_P),
+                          top_phenotypes_to_consider)
+    else:
+        print("  - Not enough phenotypes selected to generate heatmaps (need at least 2).")
+
+    print("\n--- Script finished ---")
 
 
-message(paste0("  - Total raw data rows loaded: ", nrow(all_raw_data_long)))
 
-# --- Dumbbell Plot Generation ---
-message("\n--- Generating individual dumbbell plots for each donor pair ---")
-plot_list <- list()
+                                                                  ##PLOTTING
+                                                                  # manually relabel phenotypes to meaningful label
+                                                                  import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+import numpy as np
+import os  # Import os module for path manipulation
 
-for (i in seq(1, length(input_files), by = 2)) {
-  file_c_path <- input_files[i]
-  file_o_path <- input_files[i+1]
-  
-  sample_c_id <- extract_individual_id(file_c_path) # e.g., D1T0, D6T0a
-  sample_o_id <- extract_individual_id(file_o_path) # e.g., D1T4, D6T4a
-  
-  # >>> ROBUST DONOR_ID EXTRACTION FOR ALL PLOTS/ANALYSES <<<
-  d_part <- str_extract(sample_c_id, "D\\d+") 
-  ab_part <- str_extract(sample_c_id, "[ab]") 
-  
-  if (!is.na(ab_part)) {
-    donor_id <- paste0(d_part, ab_part) 
-  } else {
-    donor_id <- d_part
-  }
-  # --- END ROBUST DONOR_ID EXTRACTION ---
-  
-  message(paste0("  - Debugging: Processing pair: C_ID='", sample_c_id, "', O_ID='", sample_o_id, "'. Derived donor_id: '", donor_id, "'"))
-  
-  # Filter data for the current pair
-  current_pair_data <- all_raw_data_long %>%
-    filter(SampleID %in% c(sample_c_id, sample_o_id)) %>%
-    pivot_wider(names_from = SampleID, values_from = Score) %>%
-    filter(!is.na(.data[[sample_c_id]]) & !is.na(.data[[sample_o_id]])) %>%
-    mutate(
-      Score_C = .data[[sample_c_id]],
-      Score_O = .data[[sample_o_id]],
-      absolute_difference = abs(Score_O - Score_C)
+# --- Configuration (copied from your script) ---
+TOP_PHENOTYPES_COUNT = 30  # Number of top phenotypes to select for heatmap
+
+
+# --- Functions ---
+
+def load_correlation_data(filepath, separator='\t'):
+    """
+    Loads the correlation data from a TSV/CSV file.
+    Assumes the file contains 'Phenotype_1_Description', 'Phenotype_2_Description',
+    'Pearson_R', and 'P_Value' columns.
+    """
+    try:
+        df = pd.read_csv(filepath, sep=separator)
+        required_cols = ['Phenotype_1_Description', 'Phenotype_2_Description', 'Pearson_R', 'P_Value']
+
+        # Check if all required columns are present
+        if not all(col in df.columns for col in required_cols):
+            missing_cols = [col for col in required_cols if col not in df.columns]
+            raise ValueError(f"Input file is missing required columns: {missing_cols}\n"
+                             f"Please ensure your file has all of: {required_cols}.")
+
+        # Ensure numeric types for Pearson_R and P_Value, coercing errors to NaN
+        df['Pearson_R'] = pd.to_numeric(df['Pearson_R'], errors='coerce')
+        df['P_Value'] = pd.to_numeric(df['P_Value'], errors='coerce')
+
+        # Drop rows where critical numeric conversions failed (i.e., 'Pearson_R' or 'P_Value' are NaN)
+        df.dropna(subset=['Pearson_R', 'P_Value'], inplace=True)
+
+        return df
+    except FileNotFoundError:
+        print(f"Error: The file '{filepath}' was not found.")
+        return None
+    except pd.errors.EmptyDataError:
+        print(f"Error: The file '{filepath}' is empty.")
+        return None
+    except Exception as e:
+        print(f"An unexpected error occurred while loading the file: {e}")
+        return None
+
+
+def prepare_matrix(df, value_column):
+    """
+    Transforms the long-format correlation or p-value data (pairs) into a square matrix.
+    """
+    # Get all unique phenotype descriptions to form the matrix axes
+    all_phenotypes = pd.concat([df['Phenotype_1_Description'], df['Phenotype_2_Description']]).unique()
+
+    # Initialize an empty square DataFrame with NaN values
+    matrix = pd.DataFrame(index=all_phenotypes, columns=all_phenotypes, dtype=float)
+
+    # Populate the matrix with values, ensuring symmetry
+    for _, row in df.iterrows():
+        pheno1_desc = row['Phenotype_1_Description']
+        pheno2_desc = row['Phenotype_2_Description']
+        value = row[value_column]
+
+        matrix.loc[pheno1_desc, pheno2_desc] = value
+        matrix.loc[pheno2_desc, pheno1_desc] = value  # Populate the symmetric entry
+
+    return matrix
+
+
+def plot_heatmap(matrix, title, output_path, annot, cmap, fmt, linewidths):
+    """
+    Generates and saves a heatmap of the provided matrix, matching the user's style.
+    """
+    plt.figure(figsize=(16, 14))  # Use user-specified figure size
+
+    # Create a mask for the upper triangle if the matrix is square
+    # This avoids redundant information in a symmetric correlation matrix
+    mask = None
+    if matrix.shape[0] == matrix.shape[1]:  # Check if the matrix is square
+        mask = np.triu(np.ones_like(matrix, dtype=bool))
+
+    # Generate the heatmap using seaborn
+    sns.heatmap(
+        matrix,
+        mask=mask,  # Apply the mask
+        annot=annot,  # Use provided annotation setting (False as per your snippet)
+        fmt=fmt,  # Use provided format string (e.g., ".2f", ".2e")
+        cmap=cmap,  # Use the specified colormap (e.g., 'coolwarm', 'viridis_r')
+        linewidths=linewidths  # Use the specified linewidths (0.5 as per your snippet)
+        # vmin/vmax are not specified in your snippet, so we omit them for exact style matching
     )
-  
-  if (nrow(current_pair_data) == 0) {
-    message(paste0("    - No complete data for donor pair ", donor_id, ". Skipping plot."))
-    plot_list[[paste0("plot_", donor_id)]] <- ggplot() + 
-      labs(title = paste0(donor_id, " (No Data)"), 
-           x = "Raw PGS Score", y = "Phenotype") + 
-      theme_void() + 
-      theme(plot.title = element_text(hjust = 0.5, size = 12, face = "italic"))
-    next
-  }
-  
-  # --- Per-Pair Trait Selection for Dumbbell Plots ---
-  message(paste0("    - Selecting top phenotypes for pair ", donor_id, " (", PERCENTILE_THRESHOLD, "th percentile for dumbbell plot)..."))
-  
-  percentile_value_per_pair <- quantile(current_pair_data$absolute_difference, 1 - (PERCENTILE_THRESHOLD / 100.0), na.rm = TRUE)
-  
-  selected_top_phenotypes_for_this_pair <- current_pair_data %>%
-    filter(absolute_difference >= percentile_value_per_pair) %>%
-    arrange(desc(absolute_difference)) %>% 
-    head(MAX_TRAITS_TO_PLOT_DUMBBELL) %>%
-    pull(Phenotype_Label)
-  
-  if (length(selected_top_phenotypes_for_this_pair) == 0) {
-    message(paste0("    - No phenotypes met the ", PERCENTILE_THRESHOLD, "th percentile threshold for pair ", donor_id, ". Selecting top 1 trait as fallback."))
-    selected_top_phenotypes_for_this_pair <- head(current_pair_data %>% arrange(desc(absolute_difference)) %>% pull(Phenotype_Label), 1)
-  }
-  
-  message(paste0("    - Selected ", length(selected_top_phenotypes_for_this_pair), " top phenotypes for pair ", donor_id, "."))
-  
-  pair_plot_data_filtered <- current_pair_data %>%
-    filter(Phenotype_Label %in% selected_top_phenotypes_for_this_pair)
-  
-  if (nrow(pair_plot_data_filtered) == 0) {
-    message(paste0("    - No data remaining after per-pair trait selection for donor pair ", donor_id, ". Skipping plot."))
-    plot_list[[paste0("plot_", donor_id)]] <- ggplot() + 
-      labs(title = paste0(donor_id, " (No Data)"), 
-           x = "Raw PGS Score", y = "Phenotype") + 
-      theme_void() + 
-      theme(plot.title = element_text(hjust = 0.5, size = 12, face = "italic"))
-    next
-  }
-  
-  phenotype_order_for_plot <- pair_plot_data_filtered %>%
-    arrange(Score_C) %>%
-    pull(Phenotype_Label)
-  
-  pair_plot_data_filtered$Phenotype_Label <- factor(pair_plot_data_filtered$Phenotype_Label, levels = phenotype_order_for_plot)
-  
-  plot_points_data <- pair_plot_data_filtered %>%
-    pivot_longer(
-      cols = c(Score_C, Score_O),
-      names_to = "Score_Type",
-      values_to = "Score_Value"
-    ) %>%
-    mutate(
-      Dot_Color_Category = case_when( 
-        Score_Type == "Score_C" ~ "Control",
-        Score_Type == "Score_O" ~ "Outcome"
-      )
-    )
-  
-  plot_min_score <- min(plot_points_data$Score_Value, na.rm = TRUE)
-  plot_max_score <- max(plot_points_data$Score_Value, na.rm = TRUE)
-  
-  padding <- (plot_max_score - plot_min_score) * 0.1
-  if (padding == 0) padding <- 1 
-  plot_min_score_padded <- plot_min_score - padding
-  plot_max_score_padded <- plot_max_score + padding
-  
-  if (plot_min_score_padded == plot_max_score_padded) {
-    plot_min_score_padded <- plot_min_score - 0.1
-    plot_max_score_padded <- plot_max_score + 0.1
-  }
-  
-  p <- ggplot(pair_plot_data_filtered, aes(y = Phenotype_Label)) +
-    geom_segment(aes(x = Score_C, xend = Score_O), 
-                 linewidth = 0.8, color = "grey50") +
-    geom_point(data = plot_points_data, 
-               aes(x = Score_Value, color = Dot_Color_Category, shape = Dot_Color_Category), 
-               size = 3, alpha=0.6) + 
-    labs(
-      subtitle = paste0("Donor: ", donor_id), 
-      x = "Raw PGS Score",
-      y = "Phenotype"
-    ) +
-    theme_minimal() +
-    theme(
-      plot.subtitle = element_text(hjust = 0.5, size = 12, face = "bold"),
-      axis.title.x = element_text(size = 10, face = "bold", color = "black"),
-      axis.title.y = element_text(size = 10, face = "bold", color = "black"),
-      axis.text.x = element_text(size = 8, color = "black"),
-      axis.text.y = element_text(size = 7, color = "black"),
-      legend.position = "bottom",
-      legend.box = "horizontal",
-      legend.title = element_text(size = 9, face = "bold"),
-      legend.text = element_text(size = 8),
-      panel.grid.major.y = element_line(color = "lightgray", linetype = "dotted", linewidth = 0.5),
-      panel.grid.major.x = element_line(color = "lightgray", linetype = "dotted", linewidth = 0.5),
-      panel.grid.minor = element_blank(),
-      plot.margin = unit(c(0.25, 0.25, 0.25, 0.25), "cm")
-    ) +
-    coord_cartesian(xlim = c(plot_min_score_padded, plot_max_score_padded)) +
-    scale_color_manual(
-      name = "Sample Type",
-      values = c("Control" = "red", "Outcome" = "blue"),
-      labels = c(paste0("Control (", sample_c_id, ")"), paste0("Outcome (", sample_o_id, ")"))
-    ) +
-    scale_shape_manual(
-      name = "Sample Type", 
-      values = c("Control" = 16, "Outcome" = 17), 
-      labels = c(paste0("Control (", sample_c_id, ")"), paste0("Outcome (", sample_o_id, ")")) 
-    )
-  
-  list_key <- paste0("plot_", donor_id)
-  message(paste0("  - Debugging: Storing plot for donor_id '", donor_id, "' with key '", list_key, "'"))
-  plot_list[[list_key]] <- p
-}
 
-message("\n--- Debugging: Keys in plot_list after generation (Dumbbell Plots) ---")
-print(names(plot_list))
-message(paste0("  - Total dumbbell plots generated (by unique keys): ", length(plot_list)))
+    plt.title(title, fontsize=16)  # Set title as per your snippet
+    plt.xticks(rotation=90, ha='right')  # Rotate x-axis labels for readability
+    plt.yticks(rotation=0)  # Keep y-axis labels horizontal
+    plt.tight_layout()  # Adjust layout to prevent labels from overlapping, as per your snippet
 
-# --- Create Composite Dumbbell Plot ---
-message("\n--- Creating composite dumbbell plot ---")
-
-n_plots_dumbbell <- length(plot_list)
-n_cols_composite_dumbbell <- 2 
-n_rows_composite_dumbbell <- ceiling(n_plots_dumbbell / n_cols_composite_dumbbell) 
-
-composite_dumbbell_plot <- wrap_plots(plot_list, ncol = n_cols_composite_dumbbell) +
-  plot_annotation(
-    title = paste0("PGS Raw Score Changes by Donor\n(Top ", MAX_TRAITS_TO_PLOT_DUMBBELL, " Phenotypes per Pair, displaying 99th percentile)"),
-    theme = theme(plot.title = element_text(hjust = 0.5, size = 12, face = "bold", margin = margin(b = 10))) 
-  ) & theme(legend.position = "bottom") 
-
-height_per_panel_dumbbell <- max(7, 0.25 * MAX_TRAITS_TO_PLOT_DUMBBELL) 
-composite_dumbbell_plot_height_in <- n_rows_composite_dumbbell * height_per_panel_dumbbell
-composite_dumbbell_plot_width_in <- n_cols_composite_dumbbell * 8 
-
-if (composite_dumbbell_plot_height_in > 40) composite_dumbbell_plot_height_in <- 40  
-if (composite_dumbbell_plot_width_in > 30) composite_dumbbell_plot_width_in <- 30  
-
-ggsave(output_composite_dumbbell_plot_filename,
-       plot = composite_dumbbell_plot,
-       width = composite_dumbbell_plot_width_in,
-       height = composite_dumbbell_plot_height_in,
-       units = "in", dpi = 300, bg = "white")
-
-message(paste0("\n--- Composite dumbbell plot saved to '", output_composite_dumbbell_plot_filename, "' ---"))
+    # Save the plot to the specified output path and close it
+    plt.savefig(output_path)
+    plt.close()
+    print(f"  - Heatmap saved to {output_path}")
 
 
-# --- Cross-Phenotype Correlation Analysis of Change Scores ---
-message("\n--- Starting Cross-Phenotype Correlation Analysis of Change Scores ---")
+# --- Main Script ---
+if __name__ == "__main__":
+    print("--- Pearson Correlation and P-value Heatmap Generator (Style-Matched) ---")
+    print("This script requires your input file to have the following columns:")
+    print("  'Phenotype_1_Description'")
+    print("  'Phenotype_2_Description'")
+    print("  'Pearson_R'")
+    print("  'P_Value'")
 
-# 1. Prepare data for calculating change scores for each donor and phenotype
-message("  - Restructuring data to calculate change scores per donor and phenotype...")
-df_paired_scores <- all_raw_data_long %>%
-  mutate(
-    d_part = str_extract(SampleID, "D\\d+"),
-    ab_part = str_extract(SampleID, "[ab]"),
-    donor_id = ifelse(!is.na(ab_part), paste0(d_part, ab_part), d_part)
-  ) %>%
-  mutate(
-    Timepoint = case_when(
-      str_detect(SampleID, "T0") ~ "T0",
-      str_detect(SampleID, "T4") ~ "T4",
-      TRUE ~ NA_character_
-    )
-  ) %>%
-  pivot_wider(
-    id_cols = c(donor_id, Phenotype_Label),
-    names_from = Timepoint,
-    values_from = Score,
-    names_prefix = "Score_"
-  ) %>%
-  filter(!is.na(Score_T0) & !is.na(Score_T4)) %>%
-  mutate(Change_Score = Score_T4 - Score_T0)
+    # Prompt user for the input file path
+    input_filepath = input(
+        "\nEnter the path to your correlation data file (e.g., 'my_correlations_with_descriptions.tsv'): ")
 
-if (nrow(df_paired_scores) == 0) {
-  stop("Error: No complete paired T0 and T4 data found for correlation analysis after restructuring.")
-}
-message(paste0("  - Data restructured. Total paired change score entries: ", nrow(df_paired_scores)))
+    # Prompt user for the file separator
+    file_separator = input("Enter the file separator (e.g., '\\t' for TSV, ',' for CSV): ")
+    if file_separator == '\\t':  # Handle the literal string '\t'
+        file_separator = '\t'
 
-# 2. Select Global Top Phenotypes for Correlation
-message("  - Selecting top phenotypes for global correlation analysis...")
-global_phenotype_avg_change <- df_paired_scores %>%
-  group_by(Phenotype_Label) %>%
-  summarise(
-    Average_Abs_Change = mean(abs(Change_Score), na.rm = TRUE),
-    N_Donors = n(),
-    .groups = 'drop'
-  ) %>%
-  arrange(desc(Average_Abs_Change))
+    # Define output directory and file paths for the heatmaps
+    output_dir = "heatmaps_styled"  # Creates a new directory for these styled heatmaps
+    os.makedirs(output_dir, exist_ok=True)  # Create the output directory if it doesn't exist
+    output_r_path = os.path.join(output_dir, "correlation_heatmap_R.png")  # Matches your output filename
+    output_p_path = os.path.join(output_dir, "correlation_heatmap_P.png")  # Matches your output filename
 
-selected_phenotypes_for_correlation <- global_phenotype_avg_change %>%
-  filter(N_Donors >= 2) %>% 
-  head(MAX_TRAITS_FOR_CORRELATION) %>%
-  pull(Phenotype_Label)
+    # Load the data
+    df = load_correlation_data(input_filepath, separator=file_separator)
 
-if (length(selected_phenotypes_for_correlation) < 2) {
-  stop(paste0("Error: Not enough phenotypes (need at least 2) with sufficient data for correlation analysis. Found ", length(selected_phenotypes_for_correlation), " selected."))
-}
-message(paste0("  - Selected ", length(selected_phenotypes_for_correlation), " top phenotypes for correlation."))
+    if df is not None:
+        if df.empty:
+            print("The loaded file is empty or contains no valid data rows after processing. Cannot generate heatmaps.")
+        else:
+            all_phenotypes_in_data = pd.concat([df['Phenotype_1_Description'], df['Phenotype_2_Description']]).unique()
+            if len(all_phenotypes_in_data) < 2:
+                print(
+                    f"Warning: Only {len(all_phenotypes_in_data)} unique phenotype(s) found in your data. A heatmap requires at least two distinct phenotypes to show relationships.")
+                print("Please check your input data for sufficient unique phenotype pairs.")
+            else:
+                # Prepare Pearson R-value matrix
+                print("\nPreparing Pearson R-value matrix...")
+                R_matrix = prepare_matrix(df, 'Pearson_R')
+                # For R-value matrix, self-correlation is typically 1.0. Fill diagonal if not present in input.
+                np.fill_diagonal(R_matrix.values, 1.0)
 
-# 3. Pivot data wider for correlation matrix (rows = donors, columns = phenotype change scores)
-df_change_scores_wide <- df_paired_scores %>%
-  filter(Phenotype_Label %in% selected_phenotypes_for_correlation) %>%
-  select(donor_id, Phenotype_Label, Change_Score) %>%
-  pivot_wider(
-    names_from = Phenotype_Label,
-    values_from = Change_Score
-  ) %>%
-  column_to_rownames("donor_id") 
+                # Prepare P-value matrix
+                print("Preparing P-value matrix...")
+                P_matrix = prepare_matrix(df, 'P_Value')
+                # For P-value matrix, diagonal is usually NaN or 0, not 1.0. It's left as is if not in input data.
 
-message(paste0("  - Prepared correlation matrix data for ", nrow(df_change_scores_wide), " donors and ", ncol(df_change_scores_wide), " phenotypes."))
+                # --- Simulate filtering for top phenotypes as in your provided script ---
+                # This step selects phenotypes that have at least 2 non-NaN values
+                # and then takes the top N by completeness, mirroring your script's logic.
+                print("Selecting top phenotypes for heatmap generation...")
 
-# 4. Perform Correlation Analysis using Hmisc::rcorr
-message("  - Calculating Pearson correlation matrix and p-values...")
-correlation_results <- rcorr(as.matrix(df_change_scores_wide), type = "pearson")
+                phenotype_completeness = R_matrix.count().sort_values(ascending=False)
+                eligible_phenotypes = phenotype_completeness[phenotype_completeness >= 2].index
 
-R_matrix <- correlation_results$r
-P_matrix <- correlation_results$P
+                # Select the top N phenotypes from the eligible ones
+                top_phenotypes_to_consider = eligible_phenotypes[:TOP_PHENOTYPES_COUNT].tolist()
 
-# 5. Report Significant Correlations (p < 0.05)
-message("\n--- Significant Cross-Phenotype Correlations of Change Scores (p < 0.05) ---")
-significant_correlations <- data.frame(
-  Phenotype1 = rownames(R_matrix)[row(R_matrix)],
-  Phenotype2 = colnames(R_matrix)[col(R_matrix)],
-  Pearson_r = as.vector(R_matrix),
-  P_value = as.vector(P_matrix)
-) %>%
-  filter(Phenotype1 != Phenotype2) %>% 
-  rowwise() %>%
-  mutate(
-    Pair_ID = paste(sort(c(Phenotype1, Phenotype2)), collapse = "---")
-  ) %>%
-  ungroup() %>%
-  distinct(Pair_ID, .keep_all = TRUE) %>% 
-  select(-Pair_ID) %>%
-  filter(P_value < 0.05) %>% 
-  arrange(P_value) 
+                if len(top_phenotypes_to_consider) < 2:
+                    print(
+                        f"Only {len(top_phenotypes_to_consider)} top phenotypes selected after filtering. Need at least 2 for heatmap generation. Skipping heatmaps.")
+                else:
+                    # Filter R_matrix and P_matrix to include only these top phenotypes
+                    R_matrix_filtered = R_matrix.loc[top_phenotypes_to_consider, top_phenotypes_to_consider]
+                    P_matrix_filtered = P_matrix.loc[top_phenotypes_to_consider, top_phenotypes_to_consider]
 
-if (nrow(significant_correlations) > 0) {
-  print(significant_correlations)
-  message("\nNote: A small number of donors (N=", nrow(df_change_scores_wide), ") may lead to unstable correlations and high p-values. Interpret with caution.")
-} else {
-  message("  - No significant correlations (p < 0.05) found among the selected phenotypes.")
-}
+                    print(f"  - Selected {len(top_phenotypes_to_consider)} top phenotypes for heatmap generation.")
 
-# 6. Visualize Correlation Matrix (Heatmap)
-message("\n--- Generating Correlation Heatmap ---")
+                    # Plot and save R-value heatmap, matching your exact style
+                    print("Generating Pearson R-value heatmap...")
+                    plot_heatmap(R_matrix_filtered,
+                                 'Pearson Correlation (R) Matrix of Change Scores (Top Phenotypes)',
+                                 output_r_path,
+                                 annot=False,  # As per your snippet
+                                 cmap='coolwarm',  # As per your snippet
+                                 fmt=".2f",  # As per your snippet
+                                 linewidths=.5)  # As per your snippet
 
-heatmap_title <- paste0("Pearson Correlation of PGS Score Changes Across Donors (N=", nrow(df_change_scores_wide), ")\nTop ", length(selected_phenotypes_for_correlation), " Phenotypes by Avg. Absolute Change")
+                    # Plot and save P-value heatmap, matching your exact style
+                    print("Generating P-value heatmap...")
+                    plot_heatmap(P_matrix_filtered,
+                                 'P-value Matrix of Change Scores (Top Phenotypes)',
+                                 output_p_path,
+                                 annot=False,  # As per your snippet
+                                 cmap='viridis_r',  # As per your snippet
+                                 fmt=".2e",  # As per your snippet
+                                 linewidths=.5)  # As per your snippet
 
-png(output_correlation_heatmap_filename, 
-    width = 10 + ncol(R_matrix)*0.2, 
-    height = 10 + ncol(R_matrix)*0.2, 
-    units = "in", res = 300)
-
-corrplot(R_matrix, 
-         p.mat = P_matrix, 
-         sig.level = 0.05, 
-         insig = "blank", 
-         method = "color", 
-         type = "upper", 
-         tl.col = "black", 
-         tl.srt = 45, 
-         tl.cex = 0.6, 
-         number.cex = 0.5, 
-         addCoef.col = "black", 
-         col = colorRampPalette(c("blue", "white", "red"))(200), 
-         title = heatmap_title,
-         mar = c(0,0,3,0)
-)
-
-dev.off() 
-message(paste0("--- Correlation heatmap saved to '", output_correlation_heatmap_filename, "' ---"))
-
-# 7. Generate a Single Scatter Plot for the Most Negatively Correlated Pair
-message("\n--- Generating a single scatter plot for the most negatively correlated change scores ---")
-
-# Prioritize significant negative correlations, then fall back to most negative overall
-most_negative_correlation <- significant_correlations %>%
-  filter(Pearson_r < 0) %>%
-  arrange(Pearson_r) %>%
-  head(1)
-
-if (nrow(most_negative_correlation) == 0) {
-  # If no *significant* negative correlations, find the most negative one regardless of significance
-  message("  - No *significant* negative correlations found. Looking for the overall most negative correlation.")
-  most_negative_correlation <- data.frame(
-    Phenotype1 = rownames(R_matrix)[row(R_matrix)],
-    Phenotype2 = colnames(R_matrix)[col(R_matrix)],
-    Pearson_r = as.vector(R_matrix),
-    P_value = as.vector(P_matrix)
-  ) %>%
-    filter(Phenotype1 != Phenotype2) %>%
-    rowwise() %>%
-    mutate(Pair_ID = paste(sort(c(Phenotype1, Phenotype2)), collapse = "---")) %>%
-    ungroup() %>%
-    distinct(Pair_ID, .keep_all = TRUE) %>%
-    select(-Pair_ID) %>%
-    arrange(Pearson_r) %>% # Sort by most negative R
-    head(1)
-}
-
-if (nrow(most_negative_correlation) > 0) {
-  pheno1_label <- most_negative_correlation$Phenotype1[1]
-  pheno2_label <- most_negative_correlation$Phenotype2[1]
-  pearson_r <- most_negative_correlation$Pearson_r[1]
-  p_value <- most_negative_correlation$P_value[1]
-  
-  plot_data_scatter <- df_change_scores_wide %>%
-    select(all_of(c(pheno1_label, pheno2_label))) %>%
-    rename(Pheno1_Change = all_of(pheno1_label),
-           Pheno2_Change = all_of(pheno2_label)) %>%
-    mutate(donor_id_col = rownames(.)) 
-  
-  p_scatter_single <- ggplot(plot_data_scatter, aes(x = Pheno1_Change, y = Pheno2_Change)) +
-    geom_point(size = 4, color = "darkgreen") +
-    geom_text(aes(label = donor_id_col), hjust = -0.3, vjust = 0.5, size = 3.5, color = "darkred") + 
-    geom_smooth(method = "lm", se = FALSE, color = "blue", linetype = "dashed") + 
-    labs(
-      title = paste0("Change Score Correlation: ", pheno1_label, " vs ", pheno2_label),
-      subtitle = paste0("Pearson r = ", round(pearson_r, 3), ", p = ", format.pval(p_value, digits = 3),
-                        "\nEach point represents a donor. Note: Small N (", nrow(df_change_scores_wide), ") makes correlations highly variable."),
-      x = paste0("Change in ", pheno1_label),
-      y = paste0("Change in ", pheno2_label)
-    ) +
-    theme_minimal() +
-    theme(
-      plot.title = element_text(hjust = 0.5, size = 12, face = "bold"),
-      plot.subtitle = element_text(hjust = 0.5, size = 9, face = "italic", color = "darkgray"),
-      axis.title = element_text(size = 10, face = "bold"),
-      axis.text = element_text(size = 8)
-    )
-  
-  ggsave(output_single_scatter_plot_filename,
-         plot = p_scatter_single,
-         width = 8, height = 6,
-         units = "in", dpi = 300, bg = "white")
-  
-  message(paste0("--- Single scatter plot saved to '", output_single_scatter_plot_filename, "' ---"))
-  
-} else {
-  message("  - No negative correlations found at all to plot a scatter plot.")
-}
-
-message("\n--- Analysis complete ---")
-
-
-
-# --- EXPORT ALL CORRELATIONS TO CSV ---
-message("\n--- Exporting all Pearson correlations and p-values to CSV ---")
-
-# Combine R_matrix and P_matrix into a single data frame
-# First, convert matrices to long format
-all_correlations_r_long <- as.data.frame(R_matrix) %>%
-  tibble::rownames_to_column(var = "Phenotype1") %>%
-  pivot_longer(cols = -Phenotype1, names_to = "Phenotype2", values_to = "Pearson_r")
-
-all_correlations_p_long <- as.data.frame(P_matrix) %>%
-  tibble::rownames_to_column(var = "Phenotype1") %>%
-  pivot_longer(cols = -Phenotype1, names_to = "Phenotype2", values_to = "P_value")
-
-# Merge the R and P values
-all_correlations_table_export <- left_join(all_correlations_r_long, all_correlations_p_long, 
-                                           by = c("Phenotype1", "Phenotype2"))
-
-# Filter out self-correlations (where Phenotype1 == Phenotype2)
-all_correlations_table_export <- all_correlations_table_export %>%
-  filter(Phenotype1 != Phenotype2)
-
-# Ensure unique pairs (e.g., A-B is the same as B-A, keep only one entry)
-all_correlations_table_export <- all_correlations_table_export %>%
-  rowwise() %>%
-  mutate(Pair_ID = paste(sort(c(Phenotype1, Phenotype2)), collapse = "---")) %>%
-  ungroup() %>%
-  distinct(Pair_ID, .keep_all = TRUE) %>%
-  select(-Pair_ID) %>% # Remove the temporary Pair_ID column
-  arrange(P_value) # Optional: Sort by P_value for easier review
-
-# Define the output filename
-output_all_correlations_filename <- "all_phenotype_change_correlations_R_SU.csv"
-
-# Write the data frame to a CSV file
-write.csv(all_correlations_table_export, file = output_all_correlations_filename, row.names = FALSE)
-
-message(paste0("--- All correlation data (Pearson r and P values) saved to '", output_all_correlations_filename, "' ---"))
+                    print("\nHeatmap generation complete. Check the 'heatmaps_styled' directory for your images.")
