@@ -1,24 +1,12 @@
 # PGS Score Change Scatter Plots (Dumbbell Plots) for Paired Raw Scores - Composite Plot
 
-# --- INSTALL & LOAD NECESSARY LIBRARIES ---
-# Ensure patchwork is installed for composite plotting
-if (!requireNamespace("patchwork", quietly = TRUE)) {
-  install.packages("patchwork")
-}
-library(dplyr)      # For data manipulation
-library(readr)      # For reading data (read_tsv)
-library(ggplot2)    # For plotting
-library(stringr)    # For string manipulation
-library(tools)      # For file path manipulation (basename)
-library(tidyr)      # For pivot_longer, pivot_wider
-library(purrr)      # For reduce (to combine data frames efficiently)
-library(patchwork)  # For combining plots
 
-# --- SET WORKING DIRECTORY ---
+# --- SET WORKING DIRECTORY / PATHS ---
 # <<< IMPORTANT: Adjust this path to where your input files and phenocodes file are located >>>
-setwd("~/PycharmProjects/polygenic/PGS_scores_test/SU/T0")  
+setwd("~/PycharmProjects/polygenic/PGS_scores_test/SU/T0")
 
-# --- CONFIGURATION ---
+
+# --- CONFIGURATION PARAMETERS ---
 # >>> IMPORTANT: Adjust these to match your actual file structure and desired behavior <<<
 
 # Input files (raw score .tsv.gz files, assumed to be paired C, O, C, O...)
@@ -32,36 +20,65 @@ input_files <- c(
   "GRCh37_D6T0a_merged.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz",
   "GRCh37_D6T4a_merged.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz",
   "GRCh37_D6T0b_merged.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz",
-  "GRCh37_D6T4b_merged.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz"  
+  "GRCh37_D6T4b_merged.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz"
 )
 
 # Path to your phenocodes file (should contain 'filename' and 'description' columns)
-phenocodes_path <- "phenocodes"  
+phenocodes_path <- "phenocodes"
 
 # Output composite plot filename
-output_composite_plot_filename <- "PGS_Change_Dumbbell_Composite_PerPairTopPhenotypes.png"  
+output_composite_plot_filename <- "PGS_Change_Dumbbell_Composite_PerPairTopPhenotypes_YBroken_XPerChunkMinLength_YReordered_CustomChunks.png"
 
 # Trait selection parameters
 PERCENTILE_THRESHOLD <- 99 # Filter by top N percentile of absolute differences (now per pair)
-MAX_TRAITS_TO_PLOT <- 15    # Cap for readability
+MAX_TRAITS_TO_PLOT <- 15    # Cap for readability (maximum phenotypes shown per donor)
+
+# --- Y-Axis Breaking Configuration ---
+# Default number of phenotypes to show per "chunk" if no custom setting for a donor
+PHENOTYPES_PER_CHUNK <- 4
+
+# CUSTOM CHUNK SIZES PER DONOR
+# Specify the number of phenotypes for each chunk for specific donors.
+# If a donor is not listed here, it will use the global PHENOTYPES_PER_CHUNK.
+# The sum of chunk sizes for a donor should ideally not exceed MAX_TRAITS_TO_PLOT.
+# Note: The script will adjust these if they try to plot more phenotypes than available
+#        (up to MAX_TRAITS_TO_PLOT) for a given donor.
+custom_chunk_sizes_per_donor <- list(
+  "D1" = c(1,1,1,1,1,1,1,1,1,2,1,1,1,1), # Example for D1
+  "D2" = c(1,1,1,1,1,1,1,1,1,1,1,1,1,1,1), # Example for D2
+  "D4" = c(3,1,1,1,1,1,1,1,1,1,1,1), # Example for D4
+  "D6a" = c(1,1,1,1,1,1,1,1,1,1,1,1,1,1), # Example for D6a (now correctly referenced)
+  "D6b" = c(1,1,1,1,1,1,1,1,1,1,1,1,1,1) # Example for D6b
+)
+
+# --- X-Axis Standardization Parameters (Applied PER CHUNK) ---
+# Define a minimum desired length for the X-axis of each chunk.
+# If the actual data range within a chunk is smaller than this, the axis will extend to this minimum, centered.
+MIN_X_AXIS_RANGE_PER_CHUNK <- 5000
+
+# Define a fixed amount of additional breadth to add to the *effective* data range for each chunk,
+# split equally on both sides.
+ADDITIONAL_X_AXIS_BREADTH <- 12500 # Add 10,000 units to the total x-axis breadth for each chunk
+
+X_AXIS_PADDING_PERCENT <- 0.05 # Add 5% padding to the *effective* data range (after fixed breadth) for each chunk
 
 # --- CONFIGURABLE COLUMN NAMES IN YOUR INPUT TSV.GZ FILES ---
 # !!! IMPORTANT: Adjust these to match the actual column names in your files !!!
-PHENOTYPE_COL_NAME <- "match_file"  
-SCORE_COL_NAME <- "product_total"  
+PHENOTYPE_COL_NAME <- "match_file"
+SCORE_COL_NAME <- "product_total"
 
-# --- HELPER FUNCTION TO EXTRACT INDIVIDUAL ID FROM FILENAME ---
-# This function extracts the ID used for SampleID (e.g., D1T0, D6T0a, D6T0b)
+# --- HELPER FUNCTIONS ---
+
+#' Extracts the individual ID from a given file path.
+#' Assumes ID is between the first underscore and the first dot.
 extract_individual_id <- function(filepath) {
   filename <- basename(filepath)
-  # Split the filename by underscore and take the second element.
-  # Example: "GRCh37_D6T4a_merged..." -> Splits into ["GRCh37", "D6T4a", "merged...", ...]
-  # We want the second element, which is "D6T4a".
-  id <- str_split_i(filename, "_", 2)
+  # Extract "D#T#" or "D#T#a/b" pattern
+  id <- str_extract(filename, "D\\d+T\\d+[ab]?")
   return(id)
 }
 
-# --- HELPER FUNCTION TO CLEAN TRAIT LABELS (Python-style) ---
+#' Cleans trait labels, removing specific suffixes and 'both_sexes' markers.
 clean_label_python <- function(label) {
   label_str <- as.character(label)
   label_str <- str_replace(label_str, "_filtered\\.tsv\\.bgz", "")
@@ -69,7 +86,8 @@ clean_label_python <- function(label) {
   return(parts[, 1])
 }
 
-# --- NEW HELPER FUNCTION: Crop string to the Nth underscore ---
+#' Crops a string to the Nth underscore.
+#' Useful for creating shorter, more readable phenotype codes.
 crop_to_nth_underscore <- function(text, n) {
   if (is.na(text)) return(NA)
   parts <- str_split(text, "_")[[1]]
@@ -80,10 +98,9 @@ crop_to_nth_underscore <- function(text, n) {
   }
 }
 
-# --- MAIN DATA PROCESSING FUNCTION FOR A SINGLE RAW SCORE FILE ---
-# Reads one .tsv.gz file, cleans phenotype labels, and attaches SampleID
+#' Processes a single raw score file.
+#' Reads the .tsv.gz, cleans phenotype labels, handles duplicates, and attaches SampleID.
 process_single_raw_score_file <- function(filepath, phenotype_col_name, score_col_name, phenocodes_df, verbose = TRUE) {
-  
   sample_id <- extract_individual_id(filepath)
   
   tryCatch({
@@ -120,7 +137,7 @@ process_single_raw_score_file <- function(filepath, phenotype_col_name, score_co
         # Construct the final Phenotype_Label using the cropped code and description
         Phenotype_Label = ifelse(
           !is.na(description),
-          paste0(cropped_code_label, " → ", description), # Cropped code + description
+          paste0(cropped_code_label, " \u2192 ", description), # \u2192 is the right arrow character
           cropped_code_label  # Fallback to cropped code if no description
         )
       )
@@ -142,6 +159,8 @@ process_single_raw_score_file <- function(filepath, phenotype_col_name, score_co
     return(NULL)
   })
 }
+
+# --- MAIN SCRIPT EXECUTION ---
 
 # --- LOAD PHENOCODES ---
 message(paste0("\n--- Loading phenocodes from: ", phenocodes_path, " ---"))
@@ -174,7 +193,7 @@ for (filepath in input_files) {
       phenotype_col_name = PHENOTYPE_COL_NAME,
       score_col_name = SCORE_COL_NAME,
       phenocodes_df = phenos,
-      verbose = TRUE  
+      verbose = TRUE
     )
     if (!is.null(processed_df)) {
       all_raw_data_long <- bind_rows(all_raw_data_long, processed_df)
@@ -188,59 +207,33 @@ if (nrow(all_raw_data_long) == 0) {
   stop("No data loaded from any input files. Please check file paths and ensure required columns are present and correctly named.")
 }
 
-# --- Filter out specific phenotypes ---
-message("\n--- Filtering out unwanted phenotypes ---")
-initial_pheno_count <- length(unique(all_raw_data_long$Phenotype_Label))
-
-# Define the pattern for terms to remove, separated by '|' for OR logic in regex
-terms_to_remove_pattern <- "Place of birth|television|Nap|Getting up|Z34|Alcohol|Time spent using computer|Hot drink|Lifetime number of sexual partners|fruit|Lamb|Worry|Cereal|PM: final answer|full time eduction|Cake intake|tanning|sunburn|physical activity|tiredness|shift work|Mother's age|body size at age 10|continuous-22501"
-
-all_raw_data_long <- all_raw_data_long %>%
-  filter(!str_detect(Phenotype_Label, terms_to_remove_pattern))
-
-filtered_pheno_count <- length(unique(all_raw_data_long$Phenotype_Label))
-message(paste0("  - Removed phenotypes containing: '", gsub("\\|", "', '", terms_to_remove_pattern), "'. Initial unique phenotypes: ", initial_pheno_count, ", After filter: ", filtered_pheno_count, "."))
-
-
-message(paste0("  - Total raw data rows loaded: ", nrow(all_raw_data_long)))
-
 # --- Generate Plots for Each Pair and Store in a List ---
 message("\n--- Generating individual dumbbell plots for each donor pair ---")
 plot_list <- list()
 
 for (i in seq(1, length(input_files), by = 2)) {
   file_c_path <- input_files[i]
-  file_o_path <- input_files[i+1]
+  file_o_path <- input_files[i + 1]
   
-  sample_c_id <- extract_individual_id(file_c_path) # e.g., D1T0, D6T0a
-  sample_o_id <- extract_individual_id(file_o_path) # e.g., D1T4, D6T4a
+  sample_c_id <- extract_individual_id(file_c_path)
+  sample_o_id <- extract_individual_id(file_o_path)
   
-  # >>> NEW CRITICAL CHANGE HERE: More robust donor_id extraction for plot keys <<<
-  # Example sample_c_id values: "D1T0", "D6T0a", "D6T0b"
-  
-  # 1. Extract the "D + digits" part (e.g., "D1", "D6")
-  d_part <- str_extract(sample_c_id, "D\\d+") 
-  
-  # 2. Extract the "a" or "b" part if present
-  ab_part <- str_extract(sample_c_id, "[ab]") 
-  
-  # 3. Combine them to form the unique donor_id (e.g., "D1", "D6a", "D6b")
+  # --- CRITICAL FIX: More robust donor_id extraction for plot keys and custom chunks ---
+  d_part <- str_extract(sample_c_id, "D\\d+")
+  ab_part <- str_extract(sample_c_id, "[ab]$")
   if (!is.na(ab_part)) {
-    donor_id <- paste0(d_part, ab_part) 
+    donor_id <- paste0(d_part, ab_part)
   } else {
     donor_id <- d_part
   }
-  # --- END NEW CRITICAL CHANGE ---
+  # --- END CRITICAL FIX ---
   
-  # --- DEBUGGING OUTPUT ---
   message(paste0("  - Debugging: Processing pair: C_ID='", sample_c_id, "', O_ID='", sample_o_id, "'. Derived donor_id: '", donor_id, "'"))
-  # --- END DEBUGGING OUTPUT ---
   
   # Filter data for the current pair
   current_pair_data <- all_raw_data_long %>%
     filter(SampleID %in% c(sample_c_id, sample_o_id)) %>%
     pivot_wider(names_from = SampleID, values_from = Score) %>%
-    # Filter out rows where either C or O score is missing for the selected phenotypes
     filter(!is.na(.data[[sample_c_id]]) & !is.na(.data[[sample_o_id]])) %>%
     mutate(
       Score_C = .data[[sample_c_id]],
@@ -250,164 +243,237 @@ for (i in seq(1, length(input_files), by = 2)) {
   
   if (nrow(current_pair_data) == 0) {
     message(paste0("    - No complete data for donor pair ", donor_id, ". Skipping plot."))
-    # Add an empty plot or a placeholder for missing data to maintain layout
-    plot_list[[paste0("plot_", donor_id)]] <- ggplot() + 
-      labs(title = paste0(donor_id, " (No Data)"), 
-           x = "Raw PGS Score", y = "Phenotype") + 
-      theme_void() + 
-      theme(plot.title = element_text(hjust = 0.5, size = 12, face = "italic"))
+    plot_list[[paste0("plot_", donor_id)]] <- ggplot() +
+      labs(title = paste0(donor_id, " (No Data)"),
+           x = "", y = "") +
+      theme_void() +
+      theme(plot.title = element_text(hjust = 0.5, size = 12, face = "italic"),
+            axis.title.x = element_text(size = 10, face = "bold", color = "black"),
+            axis.title.y = element_text(size = 10, face = "bold", color = "black"),
+            plot.margin = unit(c(0.1, 0.25, 0.1, 0.25), "cm"))
     next
   }
   
   # --- Per-Pair Trait Selection ---
   message(paste0("    - Selecting top phenotypes for pair ", donor_id, " (", PERCENTILE_THRESHOLD, "th percentile)..."))
   
-  # Determine the 99th percentile threshold for absolute differences in this pair
   percentile_value_per_pair <- quantile(current_pair_data$absolute_difference, 1 - (PERCENTILE_THRESHOLD / 100.0), na.rm = TRUE)
   
-  # Select top phenotypes for this specific pair
-  selected_top_phenotypes_for_this_pair <- current_pair_data %>%
+  selected_top_phenotypes_df <- current_pair_data %>%
     filter(absolute_difference >= percentile_value_per_pair) %>%
-    arrange(desc(absolute_difference)) %>% # Order by largest difference
-    head(MAX_TRAITS_TO_PLOT) %>%
-    pull(Phenotype_Label)
+    arrange(desc(absolute_difference)) %>%
+    head(MAX_TRAITS_TO_PLOT)
   
-  if (length(selected_top_phenotypes_for_this_pair) == 0) {
+  if (nrow(selected_top_phenotypes_df) == 0) {
     message(paste0("    - No phenotypes met the ", PERCENTILE_THRESHOLD, "th percentile threshold for pair ", donor_id, ". Selecting top 1 trait as fallback."))
-    selected_top_phenotypes_for_this_pair <- head(current_pair_data %>% arrange(desc(absolute_difference)) %>% pull(Phenotype_Label), 1)
+    selected_top_phenotypes_df <- head(current_pair_data %>% arrange(desc(absolute_difference)), 1)
   }
   
-  message(paste0("    - Selected ", length(selected_top_phenotypes_for_this_pair), " top phenotypes for pair ", donor_id, "."))
+  message(paste0("    - Selected ", nrow(selected_top_phenotypes_df), " top phenotypes for pair ", donor_id, "."))
   
-  # Filter data for the current plot based on the *per-pair* selected phenotypes
-  pair_plot_data_filtered <- current_pair_data %>%
-    filter(Phenotype_Label %in% selected_top_phenotypes_for_this_pair)
-  
-  if (nrow(pair_plot_data_filtered) == 0) {
-    message(paste0("    - No data remaining after per-pair trait selection for donor pair ", donor_id, ". Skipping plot."))
-    plot_list[[paste0("plot_", donor_id)]] <- ggplot() + 
-      labs(title = paste0(donor_id, " (No Data)"), 
-           x = "Raw PGS Score", y = "Phenotype") + 
-      theme_void() + 
-      theme(plot.title = element_text(hjust = 0.5, size = 12, face = "italic"))
-    next
-  }
-  
-  # Order phenotypes on Y-axis by their 'Control' score for this pair
-  phenotype_order_for_plot <- pair_plot_data_filtered %>%
-    arrange(Score_C) %>%
+  # Order phenotypes by their minimum score for consistent Y-axis ordering
+  phenotype_order_for_plot <- selected_top_phenotypes_df %>%
+    mutate(min_score = pmin(Score_C, Score_O)) %>%
+    arrange(min_score) %>%
     pull(Phenotype_Label)
   
-  pair_plot_data_filtered$Phenotype_Label <- factor(pair_plot_data_filtered$Phenotype_Label, levels = phenotype_order_for_plot)
+  selected_top_phenotypes_df$Phenotype_Label <- factor(selected_top_phenotypes_df$Phenotype_Label, levels = phenotype_order_for_plot)
   
-  # Prepare data for plotting points (long format)
-  plot_points_data <- pair_plot_data_filtered %>%
-    pivot_longer(
-      cols = c(Score_C, Score_O),
-      names_to = "Score_Type",
-      values_to = "Score_Value"
-    ) %>%
-    mutate(
-      Dot_Color_Category = case_when( # This will drive the color aesthetic
-        Score_Type == "Score_C" ~ "Control",
-        Score_Type == "Score_O" ~ "Outcome"
-      )
-    )
+  # --- Determine chunk sizes for the current donor ---
+  current_donor_chunk_sizes <- NULL
+  num_phenotypes_total <- nrow(selected_top_phenotypes_df)
   
-  # Determine X-axis limits for this specific plot
-  plot_min_score <- min(plot_points_data$Score_Value, na.rm = TRUE)
-  plot_max_score <- max(plot_points_data$Score_Value, na.rm = TRUE)
-  
-  # Add padding to x-axis
-  padding <- (plot_max_score - plot_min_score) * 0.1
-  if (padding == 0) padding <- 1 # Fallback for very narrow ranges
-  plot_min_score_padded <- plot_min_score - padding
-  plot_max_score_padded <- plot_max_score + padding
-  
-  # Ensure min/max are not identical after padding
-  if (plot_min_score_padded == plot_max_score_padded) {
-    plot_min_score_padded <- plot_min_score - 0.1
-    plot_max_score_padded <- plot_max_score + 0.1
+  if (donor_id %in% names(custom_chunk_sizes_per_donor)) {
+    custom_sizes_raw <- custom_chunk_sizes_per_donor[[donor_id]]
+    adjusted_custom_sizes <- c()
+    cumulative_phenos <- 0
+    for (cs in custom_sizes_raw) {
+      if (cs <= 0) {
+        message(paste0("      Skipping non-positive custom chunk size (", cs, ") for donor ", donor_id, "."))
+        next
+      }
+      phenos_to_take <- min(cs, num_phenotypes_total - cumulative_phenos)
+      if (phenos_to_take > 0) {
+        adjusted_custom_sizes <- c(adjusted_custom_sizes, phenos_to_take)
+        cumulative_phenos <- cumulative_phenos + phenos_to_take
+      }
+      if (cumulative_phenos >= num_phenotypes_total) break
+    }
+    current_donor_chunk_sizes <- adjusted_custom_sizes
+    
+    if (length(current_donor_chunk_sizes) == 0 && num_phenotypes_total > 0) {
+      message(paste0("      Warning: Custom chunk sizes for donor ", donor_id, " are invalid or result in no chunks. Falling back to default."))
+      num_full_chunks <- floor(num_phenotypes_total / PHENOTYPES_PER_CHUNK)
+      remainder_chunk_size <- num_phenotypes_total %% PHENOTYPES_PER_CHUNK
+      current_donor_chunk_sizes <- rep(PHENOTYPES_PER_CHUNK, num_full_chunks)
+      if (remainder_chunk_size > 0) {
+        current_donor_chunk_sizes <- c(current_donor_chunk_sizes, remainder_chunk_size)
+      }
+    } else {
+      message(paste0("      Using adjusted custom chunk sizes for donor ", donor_id, ": ", paste(current_donor_chunk_sizes, collapse = ", ")))
+    }
+    
+  } else {
+    if (num_phenotypes_total > 0) {
+      num_full_chunks <- floor(num_phenotypes_total / PHENOTYPES_PER_CHUNK)
+      remainder_chunk_size <- num_phenotypes_total %% PHENOTYPES_PER_CHUNK
+      
+      current_donor_chunk_sizes <- rep(PHENOTYPES_PER_CHUNK, num_full_chunks)
+      if (remainder_chunk_size > 0) {
+        current_donor_chunk_sizes <- c(current_donor_chunk_sizes, remainder_chunk_size)
+      }
+    } else {
+      current_donor_chunk_sizes <- c()
+    }
+    message(paste0("      Using default chunk size (", PHENOTYPES_PER_CHUNK, ") for donor ", donor_id, "."))
   }
   
-  p <- ggplot(pair_plot_data_filtered, aes(y = Phenotype_Label)) +
-    # Draw lines connecting the points (fixed neutral color)
-    geom_segment(aes(x = Score_C, xend = Score_O), 
-                 linewidth = 0.8, color = "grey50") +
-    
-    # Draw points for both Control and Outcome, colored by type, AND SHAPED BY TYPE
-    geom_point(data = plot_points_data, 
-               aes(x = Score_Value, color = Dot_Color_Category, shape = Dot_Color_Category), # Mapped shape
-               size = 3, alpha=0.6) + 
-    
-    labs(
-      subtitle = paste0("Donor: ", donor_id), # Subtitle for individual plot
-      x = "Raw PGS Score",
-      y = "Phenotype"
-    ) +
-    theme_minimal() +
-    theme(
-      plot.subtitle = element_text(hjust = 0.5, size = 12, face = "bold"),
-      axis.title.x = element_text(size = 10, face = "bold", color = "black"),
-      axis.title.y = element_text(size = 10, face = "bold", color = "black"),
-      axis.text.x = element_text(size = 8, color = "black"),
-      axis.text.y = element_text(size = 6, color = "black"),
-      legend.position = "bottom",
-      legend.box = "horizontal",
-      legend.title = element_text(size = 9, face = "bold"),
-      legend.text = element_text(size = 8),
-      panel.grid.major.y = element_line(color = "lightgray", linetype = "dotted", linewidth = 0.5),
-      panel.grid.major.x = element_line(color = "lightgray", linetype = "dotted", linewidth = 0.5),
-      panel.grid.minor = element_blank(),
-      plot.margin = unit(c(0.25, 0.25, 0.25, 0.25), "cm")
-    ) +
-    coord_cartesian(xlim = c(plot_min_score_padded, plot_max_score_padded)) +
-    scale_color_manual(
-      name = "Sample Type",
-      values = c("Control" = "red", "Outcome" = "blue"),
-      labels = c(paste0("Control (", sample_c_id, ")"), paste0("Outcome (", sample_o_id, ")"))
-    ) +
-    scale_shape_manual(
-      name = "Sample Type", 
-      values = c("Control" = 16, "Outcome" = 17), # 16 is a filled circle, 17 is a filled triangle
-      labels = c(paste0("Control (", sample_c_id, ")"), paste0("Outcome (", sample_o_id, ")")) 
-    )
+  # --- Create sub-plots for Y-axis chunks using current_donor_chunk_sizes ---
+  individual_donor_plots <- list()
   
-  # Store plot in list
-  list_key <- paste0("plot_", donor_id)
-  message(paste0("  - Debugging: Storing plot for donor_id '", donor_id, "' with key '", list_key, "'"))
-  plot_list[[list_key]] <- p
+  current_pheno_start_index <- 1
+  chunk_counter <- 1
+  
+  for (chunk_size_for_this_iteration in current_donor_chunk_sizes) {
+    if (current_pheno_start_index > num_phenotypes_total) {
+      break
+    }
+    
+    chunk_end_index <- min(current_pheno_start_index + chunk_size_for_this_iteration - 1, num_phenotypes_total)
+    
+    chunk_phenotypes <- phenotype_order_for_plot[current_pheno_start_index:chunk_end_index]
+    chunk_data <- selected_top_phenotypes_df %>%
+      filter(Phenotype_Label %in% chunk_phenotypes)
+    
+    if (nrow(chunk_data) == 0) {
+      message(paste0("        Warning: No data for chunk (", chunk_counter, ") of donor ", donor_id, ". Skipping chunk plot."))
+      current_pheno_start_index <- chunk_end_index + 1
+      chunk_counter <- chunk_counter + 1
+      next
+    }
+    
+    chunk_plot_points_data <- chunk_data %>%
+      pivot_longer(
+        cols = c(Score_C, Score_O),
+        names_to = "Score_Type",
+        values_to = "Score_Value"
+      ) %>%
+      mutate(
+        Dot_Color_Category = case_when(
+          Score_Type == "Score_C" ~ "Centre",
+          Score_Type == "Score_O" ~ "Outer"
+        )
+      )
+    
+    # --- Calculate X-Axis Range for THIS CHUNK ONLY ---
+    chunk_min_x_data <- min(chunk_plot_points_data$Score_Value, na.rm = TRUE)
+    chunk_max_x_data <- max(chunk_plot_points_data$Score_Value, na.rm = TRUE)
+    
+    chunk_actual_data_range <- chunk_max_x_data - chunk_min_x_data
+    chunk_center_x <- (chunk_min_x_data + chunk_max_x_data) / 2
+    
+    # Determine the effective range: either actual data range or minimum required length
+    effective_chunk_range <- max(chunk_actual_data_range, MIN_X_AXIS_RANGE_PER_CHUNK)
+    
+    # Calculate total padding: fixed breadth + percentage padding for this chunk based on effective range
+    total_expansion_for_chunk <- ADDITIONAL_X_AXIS_BREADTH + (effective_chunk_range * X_AXIS_PADDING_PERCENT)
+    
+    # Calculate final min/max based on the chunk's center and the total expansion
+    chunk_final_min_x <- chunk_center_x - (total_expansion_for_chunk / 2)
+    chunk_final_max_x <- chunk_center_x + (total_expansion_for_chunk / 2)
+    
+    message(paste0("        Chunk ", chunk_counter, " for donor ", donor_id, ": X-axis range [", round(chunk_final_min_x, 2), ", ", round(chunk_final_max_x, 2), "]"))
+    
+    p_chunk <- ggplot(chunk_data, aes(y = Phenotype_Label)) +
+      geom_segment(aes(x = Score_C, xend = Score_O), linewidth = 0.8, color = "grey50") +
+      geom_point(data = chunk_plot_points_data,
+                 aes(x = Score_Value, color = Dot_Color_Category, shape = Dot_Color_Category),
+                 size = 3, alpha=0.6) +
+      labs(
+        subtitle = if (chunk_counter == 1) paste0("Donor: ", donor_id) else NULL,
+        x = "",
+        y = ""
+      ) +
+      theme_minimal() +
+      theme(
+        plot.subtitle = element_text(hjust = 0.5, size = 12, face = "bold"),
+        axis.title.x = element_text(size = 10, face = "bold", color = "black"),
+        axis.title.y = element_text(size = 10, face = "bold", color = "black"),
+        axis.text.x = element_text(size = 8, color = "black", face = "bold"),
+        axis.ticks.x = element_line(),
+        axis.text.y = element_text(size = 6, color = "black", face = "bold"),
+        plot.title = element_blank(),
+        legend.position = "none",
+        panel.grid.major.y = element_line(color = "lightgray", linetype = "dotted", linewidth = 0.5),
+        panel.grid.major.x = element_line(color = "lightgray", linetype = "dotted", linewidth = 0.5),
+        panel.grid.minor = element_blank(),
+        plot.margin = unit(c(0.1, 0.25, 0.1, 0.25), "cm")
+      ) +
+      coord_cartesian(xlim = c(chunk_final_min_x, chunk_final_max_x)) + # Apply CHUNK-SPECIFIC limits
+      scale_color_manual(values = c("Centre" = "red", "Outer" = "blue")) +
+      scale_shape_manual(values = c("Centre" = 16, "Outer" = 17))
+    
+    individual_donor_plots[[paste0("chunk_", chunk_counter)]] <- p_chunk
+    
+    current_pheno_start_index <- chunk_end_index + 1
+    chunk_counter <- chunk_counter + 1
+  }
+  
+  if (length(individual_donor_plots) == 0) {
+    message(paste0("    - No valid chunks created for donor pair ", donor_id, ". Adding empty placeholder."))
+    plot_list[[paste0("plot_", donor_id)]] <- ggplot() +
+      labs(title = paste0(donor_id, " (No Data)"), x = "", y = "") +
+      theme_void() +
+      theme(plot.title = element_text(hjust = 0.5, size = 12, face = "italic"),
+            axis.title.x = element_text(size = 10, face = "bold", color = "black"),
+            axis.title.y = element_text(size = 10, face = "bold", color = "black"),
+            plot.margin = unit(c(0.1, 0.25, 0.1, 0.25), "cm"))
+  } else {
+    combined_donor_plot <- wrap_plots(individual_donor_plots, ncol = 1)
+    
+    combined_donor_plot <- combined_donor_plot + plot_layout(guides = "collect") &
+      scale_color_manual(name = "Sample Type",
+                         values = c("Centre" = "red", "Outer" = "blue"),
+                         labels = c(paste0("Centre (", sample_c_id, ")"), paste0("Outer (", sample_o_id, ")"))) &
+      scale_shape_manual(name = "Sample Type",
+                         values = c("Centre" = 16, "Outer" = 17),
+                         labels = c(paste0("Centre (", sample_c_id, ")"), paste0("Outer (", sample_o_id, ")"))) &
+      theme(legend.position = "bottom", legend.box = "horizontal", legend.direction = "horizontal")
+    
+    plot_list[[paste0("plot_", donor_id)]] <- combined_donor_plot
+  }
 }
 
-# --- DEBUGGING: Check plot_list keys after loop ---
-message("\n--- Debugging: Keys in plot_list after generation ---")
-print(names(plot_list))
-message(paste0("  - Total plots generated (by unique keys): ", length(plot_list)))
-# --- END DEBUGGING ---
-
-# --- Create Composite Plot ---
 message("\n--- Creating composite plot ---")
 
-# Determine optimal layout for patchwork (e.g., 2 columns)
 n_plots <- length(plot_list)
-n_cols_composite <- 2 # Number of columns for the composite plot
-n_rows_composite <- ceiling(n_plots / n_cols_composite) 
+n_cols_composite <- 2
+n_rows_composite <- ceiling(n_plots / n_cols_composite)
 
-# Combine plots using patchwork
 composite_plot <- wrap_plots(plot_list, ncol = n_cols_composite) +
   plot_annotation(
-    title = paste0("PGS Raw Score Changes by Donor\n(Top ", MAX_TRAITS_TO_PLOT, " Phenotypes per Pair, displaying 99th percentile)"),
-    theme = theme(plot.title = element_text(hjust = 0.5, size = 12, face = "bold", margin = margin(b = 10))) 
-  ) & theme(legend.position = "bottom") 
+    title = paste0("PGS Raw Score Changes by Donor\n(Top ", MAX_TRAITS_TO_PLOT, " Phenotypes per Pair, displaying ", PERCENTILE_THRESHOLD, "th percentile)"),
+    theme = theme(plot.title = element_text(hjust = 0.5, size = 12, face = "bold", margin = margin(b = 10)))
+  ) & theme(legend.position = "bottom")
 
 # Calculate dynamic height for the composite plot
-height_per_panel <- max(7, 0.25 * MAX_TRAITS_TO_PLOT) 
-composite_plot_height_in <- n_rows_composite * height_per_panel
-composite_plot_width_in <- n_cols_composite * 8 
+total_height_per_plot_panel <- 0
+for (plot_key in names(plot_list)) {
+  donor_id_for_height_calc <- gsub("plot_", "", plot_key)
+  num_phenos_for_this_donor <- ifelse(donor_id_for_height_calc %in% names(custom_chunk_sizes_per_donor),
+                                      sum(custom_chunk_sizes_per_donor[[donor_id_for_height_calc]]),
+                                      MAX_TRAITS_TO_PLOT)
+  
+  num_phenos_for_this_donor <- min(num_phenos_for_this_donor, MAX_TRAITS_TO_PLOT)
+  
+  total_height_per_plot_panel <- total_height_per_plot_panel + (num_phenos_for_this_donor * 0.25 + 2.0)
+}
 
-# Cap max height/width to avoid excessively large plots
-if (composite_plot_height_in > 40) composite_plot_height_in <- 40  
-if (composite_plot_width_in > 40) composite_plot_width_in <- 40  
+composite_plot_height_in <- (total_height_per_plot_panel / n_cols_composite) + 3
+composite_plot_width_in <- n_cols_composite * 8
+
+if (composite_plot_height_in > 60) composite_plot_height_in <- 60
+if (composite_plot_width_in > 40) composite_plot_width_in <- 40
 
 # --- SAVE THE COMPOSITE PLOT ---
 ggsave(output_composite_plot_filename,
@@ -416,9 +482,14 @@ ggsave(output_composite_plot_filename,
        height = composite_plot_height_in,
        units = "in", dpi = 300, bg = "white")
 
+ggsave(output_composite_plot_filename,
+       plot = composite_plot,
+       width = 20,  # <--- This is where the width is set
+       height = 28, # <--- This is where the height is set
+       units = "in", dpi = 300, bg = "white")
+
+
 message(paste0("\n--- Composite plot saved to '", output_composite_plot_filename, "' ---"))
 
-# To display the plot (might be very large if many panels/traits)
-print(composite_plot)
-
 message("--- Plotting complete ---")
+composite_plot
