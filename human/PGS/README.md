@@ -282,7 +282,7 @@ python match_aaf_retain_all_tsv_columns.py "$FILE" "matched_parts/${BASENAME}_ma
 
 The match_aaf_retain_all_tsv_columns.py script is responsible for this matching process. It multiplies the Alternate Allele Frequency (AAF) from your VCFs with the beta_EUR value from the PGS files to generate a risk score for each phenotype.
 
-### Analysis in R
+### Analysis in R & Python
 This section outlines the Python scripts used for further analysis of the calculated polygenic risk scores.
 
 phenocodes: Contains all the phenotype codes and their descriptions/associated files. This can be a text file or a small script to manage this information.
@@ -295,4 +295,4 @@ heatmap.R # Plotting heatmaps
 
 dumbbell_Custom_chunks.R # Dumbbell plots
 
-epistatic_interactions.R # Pearson correlation coefficient analysis of traits
+pearsons_heatmaps_SU.py / pearsons_heatmaps_MC.py # Pearson correlation coefficient analysis of traits
