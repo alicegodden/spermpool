@@ -294,5 +294,7 @@ histogram.R, histogram_raw_score.R,  histogram_raw_score_MC.R # histogram plotti
 heatmap.R # Plotting heatmaps
 
 dumbbell_Custom_chunks.R # Dumbbell plots
+dumbbell_plot_composite_MC_%.R
+dumbbell_plot_composite_SU_%.R
 
 pearsons_heatmaps_SU.py / pearsons_heatmaps_MC.py # Pearson correlation coefficient analysis of traits
