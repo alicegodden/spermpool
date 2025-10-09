@@ -244,6 +244,7 @@ message("Script completed. The plot now uses `facet_wrap` with `scales=\"free\"`
 
 
 # Methylcellulose
+
 # ----------------------------------------------------------------------
 # PGS Dumbbell Plots: Percentage Change (Delta %) FACETED by Delta % Magnitude
 # FIX: Y-axis (Phenotype Labels) is now independent for each facet, 
@@ -266,9 +267,9 @@ input_files <- c(
   "GRCh37_M11_C2._merged_dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz",
   "GRCh37_M11_O1.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz",
   "GRCh37_M12_C1.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz",
-  "GRCh37_M12_O1.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz"
+  "GRCh37_M12_O1.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz",
   "GRCh37_M13_C1.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz",
-  "GRCh37_M13_O1.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz"
+  "GRCh37_M13_O1.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz" # <-- FIXED COMMA HERE
 )
 phenocodes_path <- "phenocodes"  # must contain columns: filename, description
 PHENOTYPE_COL_NAME <- "match_file"
@@ -279,11 +280,18 @@ DELTA_PERCENT_BANDS <- 4 # Number of facets based on Delta % magnitude (quartile
 
 # --- HELPER FUNCTIONS ---
 
+# --- FIX: Updated regex to capture MXX_C# and MXX_O# patterns ---
 extract_individual_id <- function(filepath) {
   filename <- basename(filepath)
-  str_extract(filename, "D\\d+T\\d+[ab]?")
+  # Look for M followed by 1 or more digits, underscore, then C or O, then 1 or more digits
+  match <- str_extract(filename, "M\\d+_[CO]\\d+") 
+  # Handle the M11_C2 one-off case with an extra dot and underscore
+  if (is.na(match)) {
+    match <- str_extract(filename, "M11_C2")
+  }
+  return(match)
 }
-
+# ... (clean_label_python and crop_to_nth_underscore remain unchanged) ...
 clean_label_python <- function(label) {
   label_str <- as.character(label)
   label_str <- str_replace(label_str, "_filtered\\.tsv\\.bgz", "")
@@ -338,7 +346,8 @@ make_dumbbell_plot_delta <- function(df, plot_title="") {
     pivot_longer(cols = c(Score_C_perc, Score_O_perc),
                  names_to = "Score_Type",
                  values_to = "Score_Value") %>%
-    mutate(Dot_Color = ifelse(Score_Type=="Score_C_perc", "Central","Outer"))
+    # Use "Centre" and "Outer" for Dot_Color matching the scale_color_manual below
+    mutate(Dot_Color = ifelse(Score_Type=="Score_C_perc", "Centre","Outer")) 
   
   p <- ggplot(df, aes(y=Phenotype_Label)) +
     geom_segment(aes(x=Score_C_perc, xend=Score_O_perc),
@@ -347,13 +356,12 @@ make_dumbbell_plot_delta <- function(df, plot_title="") {
                aes(x=Score_Value, color=Dot_Color, shape=Dot_Color),
                size=3) +
     # --- KEY FIX: Use facet_wrap with scales="free" and ncol=1 ---
-    # scales="free" makes both X (score) and Y (label) axes independent.
-    # ncol=1 stacks the facets vertically.
     facet_wrap(~Score_Group, ncol=1, scales="free") + 
     labs(title=plot_title,
          x="Percentage Change from Centre (%)",
          y="Phenotype") +
-    scale_color_manual(values=c("Centre"="red","Outer"="blue"), name="Time Point") +
+    # Ensure color names match the Dot_Color mutation above
+    scale_color_manual(values=c("Centre"="red","Outer"="blue"), name="Time Point") + 
     scale_shape_manual(values=c("Centre"=16,"Outer"=17), name="Time Point") +
     # Format X-axis as percentage and add a vertical line at 0%
     scale_x_continuous(labels = scales::percent_format(scale=1)) +
@@ -442,7 +450,8 @@ top_traits <- global_changes %>%
 # --- GLOBAL AVERAGE SCORES (Delta % Calculation and Grouping) ---
 avg_df <- all_data %>%
   filter(Phenotype_Label %in% top_traits) %>%
-  mutate(Time = ifelse(str_detect(SampleID, "Centre"), "C","O")) %>%
+  # --- FIX: Use str_detect("C") to assign "C" (Centre) and "O" (Outer) ---
+  mutate(Time = ifelse(str_detect(SampleID, "C"), "C","O")) %>% 
   group_by(Phenotype_Label, Time) %>%
   summarise(mean_score = mean(Score, na.rm=TRUE), .groups="drop") %>%
   pivot_wider(names_from = Time, values_from = mean_score) %>%
