@@ -245,11 +245,7 @@ message("Script completed. The plot now uses `facet_wrap` with `scales=\"free\"`
 
 # Methylcellulose
 
-# ----------------------------------------------------------------------
-# PGS Dumbbell Plots: Percentage Change (Delta %) FACETED by Delta % Magnitude
-# FIX: Y-axis (Phenotype Labels) is now independent for each facet, 
-# ensuring only labels with data points are displayed.
-# ----------------------------------------------------------------------
+# --- METADATA ---
 
 # --- LIBRARIES ---
 library(dplyr)
@@ -269,7 +265,7 @@ input_files <- c(
   "GRCh37_M12_C1.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz",
   "GRCh37_M12_O1.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz",
   "GRCh37_M13_C1.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz",
-  "GRCh37_M13_O1.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz" # <-- FIXED COMMA HERE
+  "GRCh37_M13_O1.dedup_bcftools__CHR_nc_to_chr.nochr.aaf_scores.tsv.gz"
 )
 phenocodes_path <- "phenocodes"  # must contain columns: filename, description
 PHENOTYPE_COL_NAME <- "match_file"
@@ -278,20 +274,19 @@ PERCENTILE <- 99
 TOP_N <- 50
 DELTA_PERCENT_BANDS <- 4 # Number of facets based on Delta % magnitude (quartiles)
 
+# ----------------------------------------------------------------------
 # --- HELPER FUNCTIONS ---
+# ----------------------------------------------------------------------
 
-# --- FIX: Updated regex to capture MXX_C# and MXX_O# patterns ---
+# --- FIX: Robustly extract sample ID (e.g., M8_C1, M11_O1) ---
 extract_individual_id <- function(filepath) {
   filename <- basename(filepath)
-  # Look for M followed by 1 or more digits, underscore, then C or O, then 1 or more digits
+  # Look for "M" followed by digits, underscore, then "C" or "O", then digits (e.g., M11_C2 or M8_O1)
+  # This handles the M11_C2 edge case and the missing comma issue gracefully.
   match <- str_extract(filename, "M\\d+_[CO]\\d+") 
-  # Handle the M11_C2 one-off case with an extra dot and underscore
-  if (is.na(match)) {
-    match <- str_extract(filename, "M11_C2")
-  }
   return(match)
 }
-# ... (clean_label_python and crop_to_nth_underscore remain unchanged) ...
+
 clean_label_python <- function(label) {
   label_str <- as.character(label)
   label_str <- str_replace(label_str, "_filtered\\.tsv\\.bgz", "")
@@ -338,15 +333,16 @@ process_single_raw_score_file <- function(filepath, phenotype_col_name, score_co
   return(merged_df %>% select(Phenotype_Label, Score, SampleID))
 }
 
-
-# --- PLOTTING FUNCTION (Adapted for Percentage Change and Faceting) ---
+# ----------------------------------------------------------------------
+# --- PLOTTING FUNCTION (Updated for Centre/Outer Labels) ---
+# ----------------------------------------------------------------------
 make_dumbbell_plot_delta <- function(df, plot_title="") {
   
   plot_points_data <- df %>%
     pivot_longer(cols = c(Score_C_perc, Score_O_perc),
                  names_to = "Score_Type",
                  values_to = "Score_Value") %>%
-    # Use "Centre" and "Outer" for Dot_Color matching the scale_color_manual below
+    # Map internal Score_Type to display labels: Centre (C) and Outer (O)
     mutate(Dot_Color = ifelse(Score_Type=="Score_C_perc", "Centre","Outer")) 
   
   p <- ggplot(df, aes(y=Phenotype_Label)) +
@@ -355,12 +351,13 @@ make_dumbbell_plot_delta <- function(df, plot_title="") {
     geom_point(data=plot_points_data,
                aes(x=Score_Value, color=Dot_Color, shape=Dot_Color),
                size=3) +
-    # --- KEY FIX: Use facet_wrap with scales="free" and ncol=1 ---
+    # Use facet_wrap with scales="free" and ncol=1 for independent Y-axes
     facet_wrap(~Score_Group, ncol=1, scales="free") + 
     labs(title=plot_title,
-         x="Percentage Change from Centre (%)",
+         # Axis label updated to Centre
+         x="Percentage Change from Centre (%)", 
          y="Phenotype") +
-    # Ensure color names match the Dot_Color mutation above
+    # Set colors and shapes for Centre/Outer
     scale_color_manual(values=c("Centre"="red","Outer"="blue"), name="Time Point") + 
     scale_shape_manual(values=c("Centre"=16,"Outer"=17), name="Time Point") +
     # Format X-axis as percentage and add a vertical line at 0%
@@ -379,7 +376,9 @@ make_dumbbell_plot_delta <- function(df, plot_title="") {
 }
 
 
+# ----------------------------------------------------------------------
 # --- MAIN SCRIPT EXECUTION ---
+# ----------------------------------------------------------------------
 
 # --- LOAD PHENOCODES ---
 message(paste0("\n--- Loading phenocodes from: ", phenocodes_path, " ---"))
@@ -422,6 +421,12 @@ for (i in seq(1,length(input_files), by=2)) {
   id_c <- extract_individual_id(file_c)
   id_o <- extract_individual_id(file_o)
   
+  # Ensure IDs were extracted successfully before filtering
+  if (is.na(id_c) || is.na(id_o)) {
+    message(paste("Skipping pair due to failure to extract valid IDs:", file_c, file_o))
+    next
+  }
+  
   df_pair <- all_data %>%
     filter(SampleID %in% c(id_c,id_o)) %>%
     pivot_wider(names_from = SampleID,
@@ -450,8 +455,8 @@ top_traits <- global_changes %>%
 # --- GLOBAL AVERAGE SCORES (Delta % Calculation and Grouping) ---
 avg_df <- all_data %>%
   filter(Phenotype_Label %in% top_traits) %>%
-  # --- FIX: Use str_detect("C") to assign "C" (Centre) and "O" (Outer) ---
-  mutate(Time = ifelse(str_detect(SampleID, "C"), "C","O")) %>% 
+  # Use str_detect("C") to assign "C" (Centre) and "O" (Outer)
+  mutate(Time = ifelse(str_detect(SampleID, "_C"), "C","O")) %>% 
   group_by(Phenotype_Label, Time) %>%
   summarise(mean_score = mean(Score, na.rm=TRUE), .groups="drop") %>%
   pivot_wider(names_from = Time, values_from = mean_score) %>%
@@ -460,8 +465,8 @@ avg_df <- all_data %>%
   filter(!is.na(C) & !is.na(O) & C != 0) %>%
   
   mutate(
-    Score_C_perc = 0,
-    Score_O_perc = ((O - C) / C) * 100 
+    Score_C_perc = 0, # Centre is the baseline (0%)
+    Score_O_perc = ((O - C) / C) * 100 # Outer is the change (%)
   ) %>%
   
   # --- GROUPING: Facet by Delta % Magnitude (Quartiles) ---
@@ -476,14 +481,11 @@ avg_df <- all_data %>%
   ungroup() %>%
   
   # --- Final ordering and factoring for plotting ---
-  # 1. Order the Score_Group factor correctly
   mutate(Score_Group = factor(Score_Group, 
                               levels = unique(Score_Group[order(Score_Group_Temp)]))) %>%
   group_by(Score_Group) %>%
-  # 2. Sort Y-axis labels within each facet by the percentage change
   arrange(Score_Group, Score_O_perc) %>%
-  
-  # 3. Factor Y-axis only by the remaining unique Phenotype_Labels
+  # Factor Y-axis only by the remaining unique Phenotype_Labels
   mutate(Phenotype_Label = factor(Phenotype_Label, levels = unique(Phenotype_Label))) %>%
   
   ungroup() %>%
@@ -491,12 +493,16 @@ avg_df <- all_data %>%
 
 
 write.csv(avg_df %>% select(Phenotype_Label, C, O, Score_O_perc, Score_Group), 
-          "PGS_GlobalTop50Average_DeltaPercentChange_Faceted_MC.csv", row.names = FALSE)
+          "PGS_GlobalTop50Average_DeltaPercentChange_Faceted_Methylcellulose.csv", row.names = FALSE)
 
 # --- PLOT (ONE GLOBAL FACETED PLOT) ---
-avg_plot <- make_dumbbell_plot_delta(avg_df, paste("Average % change of absolute raw score across donors: MethylCellulose (n=", DELTA_PERCENT_BANDS, ")", sep=""))
+# --- UPDATE: Set the title for the Methylcellulose dataset ---
+plot_title_string <- "Absolute raw average, and plot of percentage change across all donors: Methylcellulose"
+
+avg_plot <- make_dumbbell_plot_delta(avg_df, plot_title_string)
 
 # --- SAVE PLOTS ---
-ggsave("PGS_GlobalTop50Average_DeltaPercentChange_Faceted_MC.png", avg_plot, width=12, height=14, dpi=300)
+# --- UPDATE: Save filename for the Methylcellulose dataset ---
+ggsave("PGS_GlobalTop50Average_DeltaPercentChange_Faceted_Methylcellulose.png", avg_plot, width=12, height=14, dpi=300)
 
-message("Script completed. The plot now uses `facet_wrap` with `scales=\"free\"` to ensure the Y-axis (phenotype labels) is unique to the data present in each facet.")
+message("Script completed for Methylcellulose dataset. The plot has been saved with 'Centre' and 'Outer' labels.")
