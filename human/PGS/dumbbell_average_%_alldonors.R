@@ -2,11 +2,6 @@ Title: Absolute raw average, and plot of percentage change across all donors
 Author: Dr. Alice M. Godden
 
 # SwimUp
-# ----------------------------------------------------------------------
-# PGS Dumbbell Plots: Percentage Change (Delta %) FACETED by Delta % Magnitude
-# FIX: Y-axis (Phenotype Labels) is now independent for each facet, 
-# ensuring only labels with data points are displayed.
-# ----------------------------------------------------------------------
 
 # --- LIBRARIES ---
 library(dplyr)
@@ -249,7 +244,6 @@ message("Script completed. The plot now uses `facet_wrap` with `scales=\"free\"`
 
 
 # Methylcellulose
-
 # ----------------------------------------------------------------------
 # PGS Dumbbell Plots: Percentage Change (Delta %) FACETED by Delta % Magnitude
 # FIX: Y-axis (Phenotype Labels) is now independent for each facet, 
@@ -344,7 +338,7 @@ make_dumbbell_plot_delta <- function(df, plot_title="") {
     pivot_longer(cols = c(Score_C_perc, Score_O_perc),
                  names_to = "Score_Type",
                  values_to = "Score_Value") %>%
-    mutate(Dot_Color = ifelse(Score_Type=="Score_C_perc", "T0","T4"))
+    mutate(Dot_Color = ifelse(Score_Type=="Score_C_perc", "Central","Outer"))
   
   p <- ggplot(df, aes(y=Phenotype_Label)) +
     geom_segment(aes(x=Score_C_perc, xend=Score_O_perc),
@@ -357,10 +351,10 @@ make_dumbbell_plot_delta <- function(df, plot_title="") {
     # ncol=1 stacks the facets vertically.
     facet_wrap(~Score_Group, ncol=1, scales="free") + 
     labs(title=plot_title,
-         x="Percentage Change from T0 (%)",
+         x="Percentage Change from Centre (%)",
          y="Phenotype") +
-    scale_color_manual(values=c("T0"="red","T4"="blue"), name="Time Point") +
-    scale_shape_manual(values=c("T0"=16,"T4"=17), name="Time Point") +
+    scale_color_manual(values=c("Centre"="red","Outer"="blue"), name="Time Point") +
+    scale_shape_manual(values=c("Centre"=16,"Outer"=17), name="Time Point") +
     # Format X-axis as percentage and add a vertical line at 0%
     scale_x_continuous(labels = scales::percent_format(scale=1)) +
     geom_vline(xintercept=0, linetype="dashed", color="darkgrey", linewidth=0.5) +
@@ -448,7 +442,7 @@ top_traits <- global_changes %>%
 # --- GLOBAL AVERAGE SCORES (Delta % Calculation and Grouping) ---
 avg_df <- all_data %>%
   filter(Phenotype_Label %in% top_traits) %>%
-  mutate(Time = ifelse(str_detect(SampleID, "T0"), "C","O")) %>%
+  mutate(Time = ifelse(str_detect(SampleID, "Centre"), "C","O")) %>%
   group_by(Phenotype_Label, Time) %>%
   summarise(mean_score = mean(Score, na.rm=TRUE), .groups="drop") %>%
   pivot_wider(names_from = Time, values_from = mean_score) %>%
