@@ -81,26 +81,26 @@ def process_individual_file(filepath, phenocodes_df):
 
 # SU (commented out)
 input_files = [
-    "PGSscores_difference_D1T4-D1T0.txt",
+#    "PGSscores_difference_D1T4-D1T0.txt",
     "PGSscores_difference_D2T4-D2T0.txt",
-    "PGSscores_difference_D4T4-D4T0.txt",
-    "PGSscores_difference_D6aT4-D6T0a.txt",
-    "PGSscores_difference_D6bT4-D6bT0.txt",
-]
+#    "PGSscores_difference_D4T4-D4T0.txt",
+#    "PGSscores_difference_D6aT4-D6T0a.txt",
+#    "PGSscores_difference_D6bT4-D6bT0.txt",
+#]
 
 # MC (active)
 #input_files = [
 #    "PGSscores_difference_MC_M8_C-O.txt",
 #    "PGSscores_difference_MC_M11_C-O.txt",
-#    "PGSscores_difference_MC_M12_C-O.txt",
+#   "PGSscores_difference_MC_M12_C-O.txt",
 #    "PGSscores_difference_MC_M13_C-O.txt",
-#]
+]
 # Ensure the script can find these files. If they are not in the same directory
 # as the script, you might need to provide their full paths or a relative path.
 # Example: input_files = ["/path/to/my/data/PGSscores_difference_D1T4-D1T0.txt", ...]
 
 phenocodes_path = "phenocodes" # Ensure this path is correct relative to where you run the script, or an absolute path
-output_heatmap_filename = "PGSscore_heatmap_Individuals_Normalized_AnnotatedRaw_20_SU.png" # Updated output filename
+output_heatmap_filename = "PGSscore_heatmap_Individuals_Normalized_AnnotatedRaw_20_SU_D1.png" # Updated output filename
 PERCENTILE_THRESHOLD = 99 # Filter by top N percentile of overall absolute differences across all individuals/traits
 MAX_TRAITS_TO_PLOT = 20 # Keep a cap for readability
 
@@ -270,13 +270,13 @@ plt.figure(figsize=(figure_width, figure_height))
 ax = sns.heatmap(
     normalized_heatmap_data, # Colors are based on Z-scores
     cmap="RdBu_r",           # Red-blue diverging colormap (reversed for high=red, low=blue)
-    annot=filtered_heatmap_data_raw_for_annot, # Annotate with raw values
-    fmt=".0f",               # Format annotations to 0 decimal places
+    annot=False,             # <--- SET TO FALSE TO REMOVE NUMBERS
+    # fmt=".0f",             # <-- REMOVE THIS LINE
     linewidths=.5,           # Lines between cells
     center=0,                # Center the colormap at 0
     linecolor='black',       # Color of lines between cells
     cbar_kws={'label': 'Normalized Score Difference (Z-score per individual)'}, # Colorbar label
-    annot_kws={"fontsize": 15} # Font size for annotations
+    # annot_kws={"fontsize": 15} # <-- REMOVE THIS LINE
 )
 
 # Now, get the colorbar object and set its label's fontweight
