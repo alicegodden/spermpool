@@ -1,20 +1,9 @@
+# spermpool/fish
 
-# Plotting human data:
+## 🚀 Overview  
+Here are all the analysis and plotting scripts for Human (GRCh38) analysis
 
-DMAG_MAF.py # Chromosomal plots of variant data
-
-Files for plotting Retroseq outputs by donor with shapes/colours:
-GRCh38_chrom_length.txt
-GRCh38_genes
-TEs_counts_norm_chromlength.py
-centromere_grch38
-human_chromplot_fixedcols_shapes.py
-human_phenogram.py
-retroseq_donor.py
-retroseq_human.py
-testing_glm.R # For GLM analysis of TE counts that have been filtered for read count and high confidence, and have had the control group TEs removed in the experimental groups
-
-venn_diagram_listprint.py # Plotting venn diagrams of overlapping gene sets
-
-# Proteomics data analysis
-analysis_filtering_proteome.R #
+## Getting Started  
+### Prerequisites  
+- Python — version 3.11 or above
+- R v4.1.1 or above
