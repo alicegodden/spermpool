@@ -1,4 +1,4 @@
-# spermpool/fish
+# spermpool/human
 
 ## 🚀 Overview  
 Here are all the analysis and plotting scripts for Human (GRCh38) analysis
@@ -7,3 +7,9 @@ Here are all the analysis and plotting scripts for Human (GRCh38) analysis
 ### Prerequisites  
 - Python — version 3.11 or above
 - R v4.1.1 or above
+
+## 📁 Directory Contents
+
+### 🎯 PGS
+### TE & Variant analysis
+### Proteomics
