@@ -26,6 +26,8 @@ Useful for visualizing SNP/indel distributions and variant clusters across chrom
 - PNG/PDF phenogram plots of variant distribution  
 - Optional overlay of SNP density or annotation categories
 
+zebrafish_99.R # For 99th percentile analysis of variants in zebrafish
+
 ---
 
 ### 🧬 GO Term Visualization
