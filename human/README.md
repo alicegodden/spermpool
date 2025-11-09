@@ -32,8 +32,14 @@ Workflows and tools for **variant calling**, **RetroSeq TE analysis**, and **phe
 Data processing and visualization scripts for **mass spectrometry–based proteomic datasets**.
 
 
+---
+
+### 🧫 Phenotypic modelling 
+Scipts for  **human sperm phenotype analysis**.
+
 
 ---
+
 
 ## 📄 Notes  
 - All analyses are configured for the **GRCh38** reference genome.  
