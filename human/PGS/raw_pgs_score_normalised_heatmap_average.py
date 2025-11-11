@@ -1,5 +1,3 @@
-# Title: Average PGS across donors z-score normalised
-# Author: Dr. Alice M. Godden
 
 # Title: Heatmap plotting z-score normalised 99th percentile data for polygenic risk scores
 # Author: Dr. Alice M. Godden
@@ -81,28 +79,28 @@ def process_individual_file(filepath, phenocodes_df):
 
 # --- CONFIGURATION ---
 # List of individual files you want to include in the heatmap
-#input_files = [
-#    "PGSscores_difference_D1T4-D1T0.txt",
-#    "PGSscores_difference_D2T4-D2T0.txt",
-#     "PGSscores_difference_D4T4-D4T0.txt",
-#    "PGSscores_difference_D6aT4-D6T0a.txt",
-#    "PGSscores_difference_D6bT4-D6bT0.txt",
-#]
-
-# MC (active)
 input_files = [
-    "PGSscores_difference_MC_M8_C-O.txt",
-    "PGSscores_difference_MC_M11_C-O.txt",
-   "PGSscores_difference_MC_M12_C-O.txt",
-    "PGSscores_difference_MC_M13_C-O.txt",
+    "PGSscores_difference_D1T4-D1T0.txt",
+    "PGSscores_difference_D2T4-D2T0.txt",
+      "PGSscores_difference_D4T4-D4T0.txt",
+    "PGSscores_difference_D6aT4-D6T0a.txt",
+    "PGSscores_difference_D6bT4-D6bT0.txt",
 ]
 
+# MC (active)
+#input_files = [
+#    "PGSscores_difference_MC_M8_C-O.txt",
+#    "PGSscores_difference_MC_M11_C-O.txt",
+#   "PGSscores_difference_MC_M12_C-O.txt",
+#    "PGSscores_difference_MC_M13_C-O.txt",
+#]
+
 phenocodes_path = "phenocodes"
-output_heatmap_filename = "PGSscore_heatmap_Average_Donor_Zscore_20_MC_mean.png" # Updated output filename
+output_heatmap_filename = "PGSscore_heatmap_Average_Donor_Zscore_20_SU_mean.png" # Updated output filename
 PERCENTILE_THRESHOLD = 99
 MAX_TRAITS_TO_PLOT = 20
 
-# --- LOAD PHENOCODES (Skipping for brevity, assume success) ---
+# --- LOAD PHENOCODES ---
 print(f"\n--- Loading phenocodes from: {phenocodes_path} ---")
 try:
     phenos = pd.read_csv(phenocodes_path, sep='\t')
@@ -116,7 +114,7 @@ except Exception as e:
     print(f"Error loading phenocodes: {e}")
     exit(1)
 
-# --- PROCESS ALL INDIVIDUAL FILES (Skipping for brevity, assume success) ---
+# --- PROCESS ALL INDIVIDUAL FILES ---
 all_individuals_dfs = []
 print(f"\n--- Processing specified individual files ---")
 
@@ -204,7 +202,9 @@ print(f"  - Head of final normalized data:")
 print(normalized_heatmap_data.head())
 
 
+# ----------------------------------------------------------------------
 # --- PLOTTING THE HEATMAP (Single Column) ---
+# ----------------------------------------------------------------------
 print(f"\n--- Generating single-column heatmap (Average Z-score) ---")
 
 # Use a fixed, narrow figure width since there is only one column.
@@ -232,15 +232,25 @@ cbar.set_label('Normalized Average Score Difference (Z-score)', rotation=270, la
 # Only one column, so set the x-tick label manually
 ax.set_xticks([0.5])
 ax.set_xticklabels(['Donor Average'], fontsize=12, rotation=45, ha='right', fontweight='bold')
-ax.setyticklabels(fontsize=15, rotation=30, fontweight='bold')
-plt.yticks(fontsize=10, fontweight='bold')
+
+# --- MODIFIED LOGIC FOR Y-AXIS LABEL WRAPPING ---
+# 1. Get the current trait labels (from the DataFrame index)
+original_labels = normalized_heatmap_data.index.tolist()
+
+# 2. Modify the labels to include a newline character at the desired wrap point
+# This handles the wrapping requested by the user
+wrapped_labels = [label.replace(" → ", "\n") for label in original_labels]
+
+# 3. Set the modified labels on the y-axis
+# Setting rotation to 0 often works best for wrapped text.
+ax.set_yticklabels(wrapped_labels, fontsize=10, rotation=0, fontweight='bold', va='center')
 
 
 # Update Title
 plt.title(
     f"Average PGS Score Z-score (Across Donors)\n(Top {len(normalized_heatmap_data)} Traits)",
     fontsize=20, fontweight='bold')
-plt.xlabel("", fontsize=18, fontweight='bold') # Remove x-label, as the tick label is sufficient
+plt.xlabel("", fontsize=22, fontweight='bold') # Remove x-label, as the tick label is sufficient
 plt.ylabel("PGS Trait", fontsize=18, fontweight='bold')
 
 plt.tight_layout()
