@@ -291,7 +291,7 @@ phenotype_score_difference_positive.R # Plotting traits with a PGS score above 0
 
 histogram.R, histogram_raw_score.R,  histogram_raw_score_MC.R # histogram plotting raw and difference of PGS with different input file handling
 
-heatmap.R # Plotting heatmaps
+heatmap.R, raw_pgs_score_normalised_heatmap_average.py # Plotting heatmaps
 
 dumbbell_Custom_chunks.R # Dumbbell plots
 
