@@ -133,7 +133,7 @@ echo "Finished processing VCF file and writing to $tsv_file"
 This step involves downloading a substantial dataset of Polygenic Score (PGS) files from the Pan-UK Biobank and filtering them to retain relevant columns for analysis.
 
 #### 3.1 Downloading PGS Files
-PGS files were downloaded from the Pan-UK Biobank phenotype manifest, accessible here. The URLs for these files are stored in a file named urls.txt.
+PGS files were downloaded from the Pan-UK Biobank phenotype manifest, accessible here<https://docs.google.com/spreadsheets/d/1AeeADtT0U1AukliiNyiVzVRdLYPkTbruQSk38DeutU8/edit#gid=903887429> . The URLs for these files are stored in a file named urls.txt.
 
 The following Slurm-compatible bash script handles the parallel download and initial filtering of these files:
 
