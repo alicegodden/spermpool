@@ -384,3 +384,171 @@ write.table(results, "gene_set_donor_comparison.tsv",
             sep="\t", quote=FALSE, row.names=FALSE)
 
 print(results)
+
+# now to look at the cell age stress-induced cell sensescence genes
+#taking all induces and stres-induced genes for cell sensescence cellage
+stress_cellage <- scan("stress_cellage_list.txt", what="character", quiet=TRUE)
+
+df$StressCellAge <- df$Gene %in% stress_cellage
+
+
+run_mwu_stress <- function() {
+  g1 <- df$Delta[df$StressCellAge]
+  g2 <- df$Delta[!df$StressCellAge]
+  
+  test <- wilcox.test(g1, g2)
+  
+  cat("\nStressCellAge vs Other:\n")
+  print(test)
+  
+  cat("Median StressCellAge:", median(g1), "\n")
+  cat("Median Other:", median(g2), "\n")
+}
+
+run_mwu_stress()
+df$StressCellAge   # TRUE / FALSE
+
+
+png("delta_stress_vs_other.png", width=800, height=600)
+
+boxplot(Delta ~ StressCellAge, data=df,
+        names = c("Other", "Stress CellAge"),
+        col   = c("grey70", "firebrick"),
+        ylab  = "Δ allele frequency (Maf_O - Maf_C)",
+        main  = "Stress-induced CellAge genes vs background")
+
+abline(h = 0, lty = 2)
+
+dev.off()
+
+
+# now per donor
+stress_cellage <- scan("stress_cellage_list.txt", what="character", quiet=TRUE)
+df$StressCellAge <- df$Gene %in% stress_cellage
+
+
+library(ggplot2)
+
+ggplot(df, aes(x = Donor, y = Delta, fill = StressCellAge)) +
+  geom_boxplot(position = position_dodge(width = 0.8), outlier.size = 0.5) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  facet_wrap(~Comp) +
+  scale_fill_manual(
+    values = c("grey70", "firebrick"),
+    labels = c("Other", "Stress CellAge")
+  ) +
+  labs(
+    x = "Donor",
+    y = "Δ allele frequency (Maf_O - Maf_C)",
+    fill = "Gene set"
+  ) +
+  theme_classic() +
+  theme(
+    text = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+# plot in time point order
+# Order timepoints properly
+df$Comp <- factor(
+  df$Comp,
+  levels = c("T0xT2", "T0xT4", "T0xT8", "T0xT12", "T0xT24", "T0xT48")
+)
+
+# Clean any stray characters (like brackets)
+df$Comp <- gsub("[()]", "", df$Comp)
+
+
+
+library(ggplot2)
+
+ggplot(df, aes(x = Donor, y = Delta, fill = StressCellAge)) +
+  geom_boxplot(position = position_dodge(width = 0.8), outlier.size = 0.5) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  
+  facet_wrap(~Comp) +
+  
+  scale_fill_manual(
+    values = c("grey70", "firebrick"),
+    labels = c("Other", "Stress CellAge")
+  ) +
+  
+  labs(
+    x = "Donor",
+    y = "Δ allele frequency (Maf_O - Maf_C)",
+    fill = "Gene set"
+  ) +
+  
+  theme_classic() +
+  theme(
+    text = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(face = "bold")   # <- cleaner facet titles
+  )
+
+facet_wrap(~Comp, labeller = label_value)
+
+df$Comp <- recode(df$Comp,
+                  "T0xT2"  = "T0–T2",
+                  "T0xT4"  = "T0–T4",
+                  "T0xT8"  = "T0–T8",
+                  "T0xT12" = "T0–T12",
+                  "T0xT24" = "T0–T24",
+                  "T0xT48" = "T0–T48")
+
+
+
+library(stringr)
+
+df$Donor <- str_extract(df$Sample, "^Donor[0-9]+")
+df$Comp  <- str_extract(df$Sample, "T0xT[0-9]+")
+
+df$Comp <- factor(
+  df$Comp,
+  levels = c("T0xT2", "T0xT4", "T0xT8", "T0xT12", "T0xT24", "T0xT48")
+)
+
+
+table(df$Comp)
+
+
+ggplot(df, aes(x = Donor, y = Delta, fill = StressCellAge)) +
+  geom_boxplot(position = position_dodge(width = 0.8), outlier.size = 0.5) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  
+  facet_wrap(~Comp, nrow = 1) +
+  
+  scale_fill_manual(
+    values = c("grey70", "firebrick"),
+    labels = c("Other", "Stress CellAge")
+  ) +
+  
+  labs(
+    x = "Donor",
+    y = "Δ allele frequency (Maf_O - Maf_C)"
+  ) +
+  
+  theme_classic() +
+  theme(
+    # ✅ Make everything bold
+    text = element_text(face = "bold"),
+    
+    # ✅ Rotate donor labels
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    
+    # ✅ Keep facet labels bold and clear
+    strip.text = element_text(face = "bold"),
+    
+    # ✅ Clean styling
+    axis.line = element_line(colour = "black"),
+    panel.grid = element_blank()
+  )
+
+#stats
+
+wilcox.test(df$Delta[df$StressCellAge],
+            df$Delta[!df$StressCellAge])
+
+median(df$Delta[df$StressCellAge])
+median(df$Delta[!df$StressCellAge])
+
