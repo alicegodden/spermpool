@@ -1,7 +1,12 @@
 # =========================
 # Load data
 # =========================
-df <- read.table("SU_sig.tsv", header=TRUE, sep="\t", stringsAsFactors=FALSE)
+
+setwd("~/Desktop/Projects/ageing/age/new_13_invesgtigation")
+
+#DM_SU_with_delta.tsv made using DM human_sperm_sig_dec23 spreadsheet- pasted into terminal, and then
+#awk 'BEGIN{FS=OFS="\t"} NR==1{print $0,"Delta"; next} {print $0,$9-$8}' SU.tsv > SU_with_delta.tsv
+df <- read.table("DM_SU_with_delta.tsv", header=TRUE, sep="\t", stringsAsFactors=FALSE)
 
 # -------------------------
 # Extract donor + comparison
@@ -69,15 +74,12 @@ print(summary_stats)
 cat("\n=== GENE SET ANALYSIS ===\n")
 
 # Load gene lists
-cellage <- scan("cellage_list.txt", what="character", quiet=TRUE)
-genage  <- scan("genage_list.txt",  what="character", quiet=TRUE)
-senmayo <- scan("senmayo_list.txt", what="character", quiet=TRUE)
+cellage <- scan("genes13_list_ids.txt", what="character", quiet=TRUE)
+
 
 # Assign category
 df$Category <- "Other"
 df$Category[df$Gene %in% cellage] <- "CellAge"
-df$Category[df$Gene %in% genage]  <- "GenAge"
-df$Category[df$Gene %in% senmayo] <- "SenMayo"
 
 # Function for MWU test
 run_mwu <- function(cat_name) {
@@ -94,8 +96,6 @@ run_mwu <- function(cat_name) {
 }
 
 run_mwu("CellAge")
-run_mwu("GenAge")
-run_mwu("SenMayo")
 
 
 # =========================
@@ -103,13 +103,13 @@ run_mwu("SenMayo")
 # =========================
 
 # Boxplot by donor
-png("delta_by_donor.png", width=800, height=600)
+png("delta_by_donor_13.png", width=800, height=600)
 boxplot(Delta ~ Donor, data=df, main="Delta by Donor")
 abline(h=0, lty=2)
 dev.off()
 
 # Boxplot by category
-png("delta_by_category.png", width=800, height=600)
+png("delta_by_category_13.png", width=800, height=600)
 boxplot(Delta ~ Category, data=df, main="Delta by Gene Category")
 abline(h=0, lty=2)
 dev.off()
@@ -128,14 +128,14 @@ library(dplyr)
 # =========================
 # Load data
 # =========================
-df <- read.table("SU_with_delta.tsv", header=TRUE, sep="\t", stringsAsFactors=FALSE)
+#df <- read.table("SU_with_delta.tsv", header=TRUE, sep="\t", stringsAsFactors=FALSE)
 
 # =========================
 # Filter SIGNIFICANT variants
 # =========================
-df <- df[df$LRT > 10, ]
+#df <- df[df$LRT > 10, ]
 
-cat("Number of significant variants:", nrow(df), "\n\n")
+#cat("Number of significant variants:", nrow(df), "\n\n")
 
 # =========================
 # Extract donor + comparison
@@ -198,7 +198,7 @@ donor_summary <- merge(donor_summary, wilcox_donor, by="Donor")
 print(donor_summary)
 
 # Save table for supplement
-write.table(donor_summary, "donor_results.tsv", sep="\t", quote=FALSE, row.names=FALSE)
+write.table(donor_summary, "donor_results_13.tsv", sep="\t", quote=FALSE, row.names=FALSE)
 # addition of time point analysis too
 
 
@@ -222,14 +222,14 @@ dc_summary$p_sign <- mapply(function(neg, n) {
 
 print(dc_summary)
 
-write.table(dc_summary, "donor_comparison_results.tsv",
+write.table(dc_summary, "donor_comparison_results_13.tsv",
             sep="\t", quote=FALSE, row.names=FALSE)
 
 
 # =========================
 # 4. PLOT (publication-quality)
 # =========================
-png("delta_by_donor.png", width=900, height=700)
+png("delta_by_donor_13.png", width=900, height=700)
 
 boxplot(Delta ~ Donor, data=df,
         col="lightgrey",
@@ -380,14 +380,14 @@ results <- df %>%
   )
 
 # Save results
-write.table(results, "gene_set_donor_comparison.tsv",
+write.table(results, "gene_set_donor_comparison_nolrt.tsv",
             sep="\t", quote=FALSE, row.names=FALSE)
 
 print(results)
 
 # now to look at the cell age stress-induced cell sensescence genes
 #taking all induces and stres-induced genes for cell sensescence cellage
-stress_cellage <- scan("stress_cellage_list.txt", what="character", quiet=TRUE)
+stress_cellage <- scan("genes13_list_ids.txt", what="character", quiet=TRUE)
 
 df$StressCellAge <- df$Gene %in% stress_cellage
 
@@ -409,7 +409,7 @@ run_mwu_stress()
 df$StressCellAge   # TRUE / FALSE
 
 
-png("delta_stress_vs_other.png", width=800, height=600)
+png("delta_stress_vs_other_nolrt.png", width=800, height=600)
 
 boxplot(Delta ~ StressCellAge, data=df,
         names = c("Other", "Stress CellAge"),
@@ -423,7 +423,7 @@ dev.off()
 
 
 # now per donor
-stress_cellage <- scan("stress_cellage_list.txt", what="character", quiet=TRUE)
+stress_cellage <- scan("genes13_list_ids.txt", what="character", quiet=TRUE)
 df$StressCellAge <- df$Gene %in% stress_cellage
 
 
@@ -552,3 +552,140 @@ wilcox.test(df$Delta[df$StressCellAge],
 median(df$Delta[df$StressCellAge])
 median(df$Delta[!df$StressCellAge])
 
+
+# filter to the list of 12
+#gene	ensembl_id
+#AKR1B1	ENSG00000085662
+#ALDH2	ENSG00000111275
+#ATF7IP	ENSG00000171681
+#HAS1	ENSG00000105723
+#HS2ST1	ENSG00000171476
+#KCNJ12	ENSG00000171223
+#ME1	ENSG00000014641
+#NBN	ENSG00000160877
+#NTN4	ENSG00000213281
+#PRKDC	ENSG00000162409
+#TACC3	ENSG00000188612
+#ZDHHC3	ENSG00000137693
+
+
+ids_of_interest <- c(
+  "ENSG00000085662", "ENSG00000111275", "ENSG00000171681",
+  "ENSG00000105723", "ENSG00000171476", "ENSG00000171223",
+  "ENSG00000014641", "ENSG00000160877", "ENSG00000213281",
+  "ENSG00000162409", "ENSG00000188612", "ENSG00000137693"
+)
+
+df_filtered <- df %>%
+  filter(
+    Gene %in% ids_of_interest,
+    StressCellAge == "Stress CellAge"
+  )
+
+
+ggplot(df_filtered, aes(x = Donor, y = Delta, fill = StressCellAge)) +
+  geom_boxplot(position = position_dodge(width = 0.8), outlier.size = 0.5) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  facet_wrap(~Comp, nrow = 1) +
+  scale_fill_manual(
+    values = c("grey70", "firebrick"),
+    labels = c("Other", "Stress CellAge")
+  ) +
+  labs(
+    x = "Donor",
+    y = "Δ allele frequency (Maf_O - Maf_C)"
+  ) +
+  theme_classic() +
+  theme(
+    text = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(face = "bold"),
+    axis.line = element_line(colour = "black"),
+    panel.grid = element_blank()
+  )
+
+
+df <- df %>%
+  mutate(Gene_clean = sub("\\..*", "", Gene))
+df_filtered <- df %>%
+  filter(
+    Gene_clean %in% ids_of_interest,
+    StressCellAge == "Stress CellAge"
+  )
+
+df %>% filter(Gene_clean %in% ids_of_interest) %>% nrow()
+
+df <- df %>%
+  mutate(
+    Gene_clean = sub("\\..*", "", Gene),
+    GeneSet = ifelse(Gene_clean %in% ids_of_interest,
+                     "Selected genes", "Other")
+  )
+
+ggplot(df, aes(x = Donor, y = Delta, fill = GeneSet)) +
+  geom_boxplot(outlier.size = 0.5) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  facet_wrap(~Comp, nrow = 1) +
+  scale_fill_manual(values = c("grey80", "firebrick")) +
+  theme_classic() +
+  theme(
+    text = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+
+# to filter to plot just the donors 5-9
+library(dplyr)
+
+df %>%
+  filter(Donor %in% paste0("Donor", 5:9)) %>%
+  ggplot(aes(x = Donor, y = Delta, fill = StressCellAge)) +
+  geom_boxplot(position = position_dodge(width = 0.8), outlier.size = 0.5) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  facet_wrap(~Comp) +
+  scale_fill_manual(
+    values = c("grey70", "firebrick"),
+    labels = c("Other", "Stress CellAge")
+  ) +
+  labs(
+    x = "Donor",
+    y = "Δ allele frequency (Maf_O - Maf_C)",
+    fill = "Gene set"
+  ) +
+  theme_classic() +
+  theme(
+    text = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(face = "bold")
+  )
+
+# now just a few timepoints
+library(dplyr)
+
+df %>%
+  filter(
+    Donor %in% paste0("Donor", 5:9),
+    tolower(Comp) %in% c("t0xt4", "t0xt24", "t0xt48")
+  ) %>%
+  mutate(
+    Donor = factor(Donor, levels = paste0("Donor", 5:9))
+  ) %>%
+  ggplot(aes(x = Donor, y = Delta, fill = StressCellAge)) +
+  geom_boxplot(position = position_dodge(width = 0.8), outlier.size = 0.5) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  facet_wrap(~Comp) +
+  scale_fill_manual(
+    values = c("grey70", "firebrick"),
+    labels = c("Other", "Stress CellAge")
+  ) +
+  labs(
+    x = "Donor",
+    y = "Δ allele frequency (Maf_O - Maf_C)",
+    fill = "Gene set"
+  ) +
+  theme_classic() +
+  theme(
+    text = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(face = "bold")
+  )
