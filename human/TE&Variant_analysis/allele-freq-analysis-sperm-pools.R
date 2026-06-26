@@ -689,3 +689,9 @@ df %>%
     axis.text.x = element_text(angle = 45, hjust = 1),
     strip.text = element_text(face = "bold")
   )
+
+
+# how many of the "13" made it
+genes13 <- unique(read.table("genes13_list_ids.txt", stringsAsFactors = FALSE)[,1])
+sum(genes13 %in% df$Gene)
+intersect(genes13, df$Gene)
