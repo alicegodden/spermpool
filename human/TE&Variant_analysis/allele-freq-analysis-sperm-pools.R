@@ -1,14 +1,6 @@
-# Title : Directional selection analysis
-# Author: Dr. Alice M. Godden
-
-
 # ==============================================================
-# Title: Streamlined Analysis of Delta Allele Frequency Changes
-# Author: (Your name)
-# Description:
-# Cleaned, modular, and reusable version of original script.
-# Removes redundancy, centralises repeated logic, and adds
-# GitHub-ready documentation.
+# Title:  Analysis of Delta Allele Frequency Changes
+# Author: Dr. Alice M. Godden
 # ==============================================================
 
 # =========================
